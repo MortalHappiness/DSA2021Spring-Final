@@ -32,4 +32,8 @@ for token in counter:
         longest_token_len = len(token)
 print(f"Longest token = {longest_token}, its length = {longest_token_len}")
 
+token_lens = [len(token) for token in counter]
+print("Length of top 15 longest tokens =",
+      sorted(token_lens, reverse=True)[:15])
+
 print("Top 5 most common tokens =", counter.most_common(5))
