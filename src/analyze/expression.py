@@ -2,7 +2,7 @@ import re
 from collections import Counter
 
 L = list()
-with open("testdata/test.in") as fin:
+with open("../testdata/test.in") as fin:
     next(fin)
     next(fin)
     for i in range(60000):
@@ -26,7 +26,7 @@ for s in L:
     tokens = re.findall("[A-Za-z0-9]+", s)
     len_counter.update([len(tokens)])
     counter.update([token.lower() for token in tokens])
-    
+
 # ========================================
 
 print(f"Total number of tokens = {len(counter)}")
@@ -42,3 +42,4 @@ print("Expression length distribution = ", len_counter.most_common(17))
 with open("expression_tokens.txt", "w") as f:
     for token in counter:
         f.write(f"{token}\n")
+
