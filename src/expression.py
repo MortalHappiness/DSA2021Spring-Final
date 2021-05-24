@@ -37,7 +37,7 @@ print("Length of top 15 longest tokens =",
 
 print("Top 5 most common tokens =", counter.most_common(5))
 
-print("Expression length distribution = ", len_counter)
+print("Expression length distribution = ", len_counter.most_common(17))
 
 with open("expression_tokens.txt", "w") as f:
     for token in counter:
