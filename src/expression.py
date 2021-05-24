@@ -20,9 +20,11 @@ with open("testdata/test.in") as fin:
             next(fin)
         next(fin)
 
+len_counter = Counter()
 counter = Counter()
 for s in L:
     tokens = re.findall("[A-Za-z0-9]+", s)
+    len_counter.update([len(tokens)])
     counter.update([token.lower() for token in tokens])
     
 # ========================================
@@ -34,6 +36,8 @@ print("Length of top 15 longest tokens =",
       sorted(token_lens, reverse=True)[:15])
 
 print("Top 5 most common tokens =", counter.most_common(5))
+
+print("Expression length distribution = ", len_counter)
 
 with open("expression_tokens.txt", "w") as f:
     for token in counter:
