@@ -37,3 +37,7 @@ print("Length of top 15 longest tokens =",
       sorted(token_lens, reverse=True)[:15])
 
 print("Top 5 most common tokens =", counter.most_common(5))
+
+with open("tokens.txt", "w") as f:
+    for token in counter:
+        f.write(f"{token}\n")
