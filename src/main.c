@@ -1,163 +1,156 @@
 #include "api.h"
 
-#define HASHSIZE 19697
-#define INDEXSIZE 1000
-// The testdata only contains the first 100 mails (mail1 ~ mail100)
-// and 2000 queries for you to debug.
+#define HASHSIZE   19697
+#define INDEXSIZE  1000
+#define MAX_NMAILS 10000
+
+// ========================================
+// Token set implementation
+
+typedef struct Node {
+    struct Node *next;
+    const char *s;
+} Node;
+
+typedef struct {
+    Node *hash_table[HASHSIZE];
+    Node *items;
+    int n_items;
+} TokenSet;
+
+// Hash function for string
+// Reference:
+// https://stackoverflow.com/questions/7666509/hash-function-for-string
+unsigned long hash(const char *str) {
+    const unsigned char *s = (unsigned char *)str;
+    unsigned long hash = 5381;
+    int c;
+
+    while (c = *s++)
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+    return hash % HASHSIZE;
+}
+
+// See whether token in the token set or not
+bool SetContains(TokenSet *set, const char *token) {
+    if (!set)
+        return false;
+    unsigned long h = hash(token);
+    Node *node = set->hash_table[h];
+    while (node != NULL) {
+        if (!strcmp(token, node->s))
+            return true;
+        node = node->next;
+    }
+    return false;
+}
+
+// Add a token into the token set
+void SetAdd(TokenSet *set, const char *token) {
+    if (SetContains(set, token))
+        return;
+    unsigned long h = hash(token);
+    Node *hash_node = (Node *)malloc(sizeof(Node));
+    Node *item_node = (Node *)malloc(sizeof(Node));
+
+    hash_node->s = token;
+    hash_node->next = set->hash_table[h];
+    set->hash_table[h] = hash_node;
+
+    item_node->s = token;
+    item_node->next = set->items;
+    set->items = item_node;
+    ++(set->n_items);
+}
+
+// ========================================
+// Global variables
 
 int n_mails, n_queries;
 mail *mails;
 query *queries;
-float similarity[10000][10000] = {-1};
 
-typedef struct hash_node {
-    char *token;
-    int len;
-    struct hash_node *next;
-} hash_node;
+int answer[MAX_NMAILS];
 
-typedef struct mail_represent {
-    int word;
-    int index[INDEXSIZE];
-    hash_node *hash_table[HASHSIZE];
-} mail_represent;
+TokenSet tokensets[MAX_NMAILS] = {NULL};
 
-mail_represent mails_list[10000];
+// ========================================
 
-void find_similarity(int id1, int id2) {
-    if (similarity[id1][id2] != -1) {
-        return similarity[id1][id2];
-    }
-    hash_node *tmp;
-    int hit_count = 0;
-    int total = 0;
-    mail_represent mail = mails_list[id1];
-
-    for (int i = 0; i < HASHSIZE; i++) {
-        tmp = mail.hash_table[i];
-        while (tmp != NULL) {
-            // if (in()) }
+void parse_and_add_to_token_set(char *s, TokenSet *set) {
+    char *start = NULL;
+    char c;
+    while (c = *s) {
+        if (c >= 'A' && c <= 'Z')
+            c = *s = c - 'A' + 'a'; // convert to lowercase
+        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) {
+            if (start) {
+                *s = '\0';
+                SetAdd(set, start);
+                start = NULL;
+            }
+        } else if (!start) {
+            start = s;
         }
+        ++s;
     }
 }
+
+double context_similarity(int i, int j) {
+    Node *node;
+    int temp, n_intersection;
+
+    if (tokensets[i].n_items > tokensets[j].n_items) {
+        temp = i;
+        i = j;
+        j = temp;
+    }
+    node = tokensets[i].items;
+    n_intersection = 0;
+    while (node) {
+        if (SetContains(tokensets + j, node->s))
+            ++n_intersection;
+        node = node->next;
+    }
+    return (double)n_intersection /
+           (tokensets[i].n_items + tokensets[j].n_items - n_intersection);
+}
+
+void find_similar_query(int query_id, int mail_id, double threshold) {
+    int i, answer_length;
+
+    answer_length = 0;
+    for (i = 0; i < n_mails; ++i) {
+        if (i == mail_id)
+            continue;
+        if (context_similarity(i, mail_id) > threshold)
+            answer[answer_length++] = i;
+    }
+    api.answer(query_id, answer, answer_length);
+}
+
+// ========================================
 
 int main(void) {
     api.init(&n_mails, &n_queries, &mails, &queries);
 
-    char token_buffer[52];
-    for (int i = 0; i < n_mails; i++) {
-        // need to add hash function
-        int idx = 0;
-        int token_buffer_len = 0;
-        int hash = 0;
-        // ------------parse content [1024] ------------------
-        while (mails[i].content[idx] != '\0') {
-            if (mails[i].content[idx] >= 'a' && mails[i].content[idx] <= 'z') {
-                token_buffer[token_buffer_len++] = mails[i].content[idx];
-            } else if (mails[i].content[idx] >= 'A' &&
-                       mails[i].content[idx] <= 'Z') {
-                token_buffer[token_buffer_len++] = mails[i].content[idx];
-            } else if (mails[i].content[idx] >= '0' &&
-                       mails[i].content[idx] <= '9') {
-                token_buffer[token_buffer_len++] = mails[i].content[idx];
-            } else {
-                if (token_buffer_len > 0) {
-                    hash_node *new_node = malloc(sizeof(hash_node));
-                    new_node->len = token_buffer_len;
-                    new_node->token =
-                        malloc((token_buffer_len + 1) * sizeof(char));
-                    for (int j = 0; j < token_buffer_len; j++) {
-                        new_node->token[j] = token_buffer[j];
-                    }
-                    new_node->token[token_buffer_len] = '\0';
-                    if (mails_list[i].hash_table[hash] == NULL) {
-                        new_node->next = NULL;
-                        mails_list[i].hash_table[hash] = new_node;
-                    } else {
-                        new_node->next = mails_list[i].hash_table[hash];
-                        mails_list[i].hash_table[hash] = new_node;
-                    }
-                    token_buffer_len = 0;
-                    hash = 0;
-                }
-            }
-            idx++;
-        }
-        if (token_buffer_len > 0) {
-            hash_node *new_node = malloc(sizeof(hash_node));
-            new_node->len = token_buffer_len;
-            new_node->token = malloc((token_buffer_len + 1) * sizeof(char));
-            for (int j = 0; j < token_buffer_len; j++) {
-                new_node->token[j] = token_buffer[j];
-            }
-            new_node->token[token_buffer_len] = '\0';
-            if (mails_list[i].hash_table[hash] == NULL) {
-                new_node->next = NULL;
-                mails_list[i].hash_table[hash] = new_node;
-            } else {
-                new_node->next = mails_list[i].hash_table[hash];
-                mails_list[i].hash_table[hash] = new_node;
-            }
-            token_buffer_len = 0;
-        }
-        // ----------- parse subject [256] --------------
-        idx = 0;
-        token_buffer_len = 0;
-        hash = 0;
-        while (mails[i].subject[idx] != '\0') {
-            if (mails[i].subject[idx] >= 'a' && mails[i].subject[idx] <= 'z') {
-                token_buffer[token_buffer_len++] = mails[i].subject[idx];
-            } else if (mails[i].subject[idx] >= 'A' &&
-                       mails[i].subject[idx] <= 'Z') {
-                token_buffer[token_buffer_len++] = mails[i].subject[idx];
-            } else if (mails[i].subject[idx] >= '0' &&
-                       mails[i].subject[idx] <= '9') {
-                token_buffer[token_buffer_len++] = mails[i].subject[idx];
-            } else {
-                if (token_buffer_len > 0) {
-                    hash_node *new_node = malloc(sizeof(hash_node));
-                    new_node->len = token_buffer_len;
-                    new_node->token =
-                        malloc((token_buffer_len + 1) * sizeof(char));
-                    for (int j = 0; j < token_buffer_len; j++) {
-                        new_node->token[j] = token_buffer[j];
-                    }
-                    new_node->token[token_buffer_len] = '\0';
-                    if (mails_list[i].hash_table[hash] == NULL) {
-                        new_node->next = NULL;
-                        mails_list[i].hash_table[hash] = new_node;
-                    } else {
-                        new_node->next = mails_list[i].hash_table[hash];
-                        mails_list[i].hash_table[hash] = new_node;
-                    }
-                    token_buffer_len = 0;
-                    hash = 0;
-                }
-            }
-            idx++;
-        }
-        if (token_buffer_len > 0) {
-            hash_node *new_node = malloc(sizeof(hash_node));
-            new_node->len = token_buffer_len;
-            new_node->token = malloc((token_buffer_len + 1) * sizeof(char));
-            for (int j = 0; j < token_buffer_len; j++) {
-                new_node->token[j] = token_buffer[j];
-            }
-            new_node->token[token_buffer_len] = '\0';
-            if (mails_list[i].hash_table[hash] == NULL) {
-                new_node->next = NULL;
-                mails_list[i].hash_table[hash] = new_node;
-            } else {
-                new_node->next = mails_list[i].hash_table[hash];
-                mails_list[i].hash_table[hash] = new_node;
-            }
-            token_buffer_len = 0;
-        }
+    int i;
+
+    for (i = 0; i < n_mails; ++i) {
+        parse_and_add_to_token_set(mails[i].subject, tokensets + mails[i].id);
+        parse_and_add_to_token_set(mails[i].content, tokensets + mails[i].id);
     }
 
-    // for(int i = 0; i < n_queries; i++)
-    // 	if(queries[i].type == expression_match)
-    // 	  api.answer(queries[i].id, NULL, 0);
+    double score = 0;
+    for (i = 0; i < n_queries; ++i) {
+        if (queries[i].type == find_similar) {
+            find_similar_query(queries[i].id,
+                               queries[i].data.find_similar_data.mid,
+                               queries[i].data.find_similar_data.threshold);
+            score += queries[i].reward;
+            fprintf(stderr, "%f\n", score);
+        }
+    }
 
     return 0;
 }
