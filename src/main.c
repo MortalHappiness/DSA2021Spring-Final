@@ -94,6 +94,8 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
         }
         ++s;
     }
+    if (start)
+        SetAdd(set, start);
 }
 
 double context_similarity(int i, int j) {
@@ -147,8 +149,8 @@ int main(void) {
             find_similar_query(queries[i].id,
                                queries[i].data.find_similar_data.mid,
                                queries[i].data.find_similar_data.threshold);
-            score += queries[i].reward;
-            fprintf(stderr, "%f\n", score);
+            /*score += queries[i].reward;*/
+            /*fprintf(stderr, "%f\n", score);*/
         }
     }
 
