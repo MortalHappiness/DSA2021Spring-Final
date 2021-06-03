@@ -8,7 +8,6 @@
 
 typedef struct Node {
     struct Node *next;
-    int hash;
     const char *s;
 } Node;
 
@@ -32,39 +31,30 @@ unsigned long hash(const char *str) {
 }
 
 // See whether token in the token set or not
-bool SetContains(TokenSet *set, const char *token, int h) {
+bool SetContains(TokenSet *set, const char *token) {
     if (!set) return false;
-    // unsigned long h = hash(token);
-    // int h
-    if (h == -1) {
-        h = hash(token);
-    }
-
+    unsigned long h = hash(token);
     Node *node = set->hash_table[h];
     while (node != NULL) {
         if (!strcmp(token, node->s)) return true;
-        // printf("strcmp\n");
         node = node->next;
     }
-    // printf("leave\n");
     return false;
 }
 
 // Add a token into the token set
 void SetAdd(TokenSet *set, const char *token) {
-    if (SetContains(set, token, -1)) return;
+    if (SetContains(set, token)) return;
     unsigned long h = hash(token);
     Node *hash_node = (Node *)malloc(sizeof(Node));
     Node *item_node = (Node *)malloc(sizeof(Node));
 
     hash_node->s = token;
     hash_node->next = set->hash_table[h];
-    hash_node->hash = (int)h;
     set->hash_table[h] = hash_node;
 
     item_node->s = token;
     item_node->next = set->items;
-    item_node->hash = (int)h;
     set->items = item_node;
     ++(set->n_items);
 }
@@ -83,7 +73,6 @@ TokenSet tokensets[MAX_NMAILS] = {NULL};
 // ========================================
 
 void parse_and_add_to_token_set(char *s, TokenSet *set) {
-    // printf("start parse\n");
     char *start = NULL;
     char c;
     while (c = *s) {
@@ -101,7 +90,6 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
         ++s;
     }
     if (start) SetAdd(set, start);
-    // printf("finish parse\n");
 }
 
 double context_similarity(int i, int j) {
@@ -116,7 +104,7 @@ double context_similarity(int i, int j) {
     node = tokensets[i].items;
     n_intersection = 0;
     while (node) {
-        if (SetContains(tokensets + j, node->s, node->hash)) ++n_intersection;
+        if (SetContains(tokensets + j, node->s)) ++n_intersection;
         node = node->next;
     }
     return (double)n_intersection /
@@ -138,11 +126,10 @@ void find_similar_query(int query_id, int mail_id, double threshold) {
 // ========================================
 
 int main(void) {
-    // clock_t start;
-    // start = clock();
+    clock_t start;
+    start = clock();
     api.init(&n_mails, &n_queries, &mails, &queries);
     // printf("%f\n", (float)(clock() - start) / CLOCKS_PER_SEC);
-    // printf("printf init\n");
     int i;
 
     for (i = 0; i < n_mails; ++i) {
@@ -154,7 +141,6 @@ int main(void) {
     double score = 0;
     for (i = 0; i < n_queries; ++i) {
         if (queries[i].type == find_similar) {
-            // printf("here\n");
             find_similar_query(queries[i].id,
                                queries[i].data.find_similar_data.mid,
                                queries[i].data.find_similar_data.threshold);
@@ -163,7 +149,7 @@ int main(void) {
 
             // printf("%f\n", (float)(clock() - old_start) / CLOCKS_PER_SEC);
             // printf("%f\n", (float)(clock() - start) / CLOCKS_PER_SEC);
-            // old_start = clock();
+            old_start = clock();
         }
     }
 
