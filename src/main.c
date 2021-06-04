@@ -1,62 +1,96 @@
 #include "api.h"
-#define HASHSIZE 19697
-#define INDEXSIZE 1000
+#define HASHSIZE 10000000
 #define MAX_NMAILS 10000
-
-// ========================================
-// Token set implementation
+#define BLOOM_K 8
 
 typedef struct Node {
     struct Node *next;
+    int len;
+    unsigned int hash[BLOOM_K];
     const char *s;
 } Node;
 
 typedef struct {
-    Node *hash_table[HASHSIZE];
-    Node *items;
+    // int bits;
+    Node *head;
+    Node *tail;
+    unsigned char *hashtable;
     int n_items;
 } TokenSet;
 
-// Hash function for string
-// Reference:
-// https://stackoverflow.com/questions/7666509/hash-function-for-string
-unsigned long hash(const char *str) {
-    const unsigned char *s = (unsigned char *)str;
-    unsigned long hash = 5381;
-    int c;
-
-    while (c = *s++) hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-
-    return hash % HASHSIZE;
-}
-
-// See whether token in the token set or not
-bool SetContains(TokenSet *set, const char *token) {
-    if (!set) return false;
-    unsigned long h = hash(token);
-    Node *node = set->hash_table[h];
-    while (node != NULL) {
-        if (!strcmp(token, node->s)) return true;
-        node = node->next;
+unsigned int murmurhash3(char *key, int len, const unsigned int seed) {
+    unsigned int c1 = 0xcc9e2d51;
+    unsigned int c2 = 0x1b873593;
+    int r1 = 15;
+    int r2 = 13;
+    int m = 5;
+    unsigned int n = 0xe6546b64;
+    unsigned int hash = seed;
+    unsigned int k;
+    // int s = 0;
+    int len_copy = len;
+    while (len >= 4) {
+        k = (key[len - 4] << 24) | (key[len - 3] << 16) | (key[len - 2] << 8) |
+            (key[len - 1]);
+        k = k * c1;
+        k = (k << r1) | (k >> (32 - r1));
+        k = k * c2;
+        hash = hash ^ k;
+        k = (k << r2) | (k >> (32 - r2));
+        hash = hash * m + n;
+        len -= 4;
     }
-    return false;
+    k = 0;
+    switch (len) {
+        case 3:
+            k |= key[2];
+        case 2:
+            k |= key[1] << 8;
+        case 1:
+            k |= key[0] << 16;
+    }
+    k = k * c1;
+    k = (k << r1) | (k >> (32 - r1));
+    k = k * c2;
+    hash = hash ^ k;
+    hash = hash ^ len_copy;
+    hash = hash ^ (hash >> 16);
+    hash = hash ^ 0x85ebca6b;
+    hash = hash ^ (hash >> 13);
+    hash = hash ^ 0xc2b2ae35;
+    hash = hash ^ (hash >> 16);
+    return hash;
+}
+void bloom_add_token(TokenSet *set, char *token, int len) {
+    Node *hash_node = (Node *)malloc(sizeof(Node));
+    hash_node->s = token;
+    hash_node->next = NULL;
+    hash_node->len = len;
+    if (set->head == NULL) {
+        set->head = hash_node;
+        set->tail = hash_node;
+    } else {
+        set->tail->next = hash_node;
+        set->tail = hash_node;
+    }
+    for (int i = 0; i < BLOOM_K; i++) {
+        int hash = murmurhash3(token, len, i) % HASHSIZE;
+        int offset = hash >> 3;
+        set->hashtable[offset] |= 1 << (hash % 8);
+        hash_node->hash[i] = hash;
+    }
 }
 
-// Add a token into the token set
-void SetAdd(TokenSet *set, const char *token) {
-    if (SetContains(set, token)) return;
-    unsigned long h = hash(token);
-    Node *hash_node = (Node *)malloc(sizeof(Node));
-    Node *item_node = (Node *)malloc(sizeof(Node));
-
-    hash_node->s = token;
-    hash_node->next = set->hash_table[h];
-    set->hash_table[h] = hash_node;
-
-    item_node->s = token;
-    item_node->next = set->items;
-    set->items = item_node;
-    ++(set->n_items);
+bool bloom_check_token(TokenSet *set, Node *token_node) {
+    for (int i = 0; i < BLOOM_K; i++) {
+        // unsigned int hash = murmurhash3(token, len, i) % HASHSIZE;
+        unsigned int hash = token_node->hash[i];
+        int offset = hash >> 3;
+        if (!(set->hashtable[offset] & (1 << (hash % 8)))) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // ========================================
@@ -81,7 +115,7 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
         if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) {
             if (start) {
                 *s = '\0';
-                SetAdd(set, start);
+                bloom_add_token(set, start, s - start);
                 start = NULL;
             }
         } else if (!start) {
@@ -89,7 +123,7 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
         }
         ++s;
     }
-    if (start) SetAdd(set, start);
+    if (start) bloom_add_token(set, start, s - start);
 }
 
 double context_similarity(int i, int j) {
@@ -101,10 +135,12 @@ double context_similarity(int i, int j) {
         i = j;
         j = temp;
     }
-    node = tokensets[i].items;
+    node = tokensets[i].head;
     n_intersection = 0;
     while (node) {
-        if (SetContains(tokensets + j, node->s)) ++n_intersection;
+        if (bloom_check_token(tokensets + j, node)) {
+            ++n_intersection;
+        }
         node = node->next;
     }
     return (double)n_intersection /
@@ -126,18 +162,16 @@ void find_similar_query(int query_id, int mail_id, double threshold) {
 // ========================================
 
 int main(void) {
-    clock_t start;
-    start = clock();
     api.init(&n_mails, &n_queries, &mails, &queries);
-    // printf("%f\n", (float)(clock() - start) / CLOCKS_PER_SEC);
+
     int i;
 
     for (i = 0; i < n_mails; ++i) {
+        tokensets[i].hashtable = malloc((HASHSIZE >> 3) * sizeof(char));
         parse_and_add_to_token_set(mails[i].subject, tokensets + mails[i].id);
         parse_and_add_to_token_set(mails[i].content, tokensets + mails[i].id);
     }
-    // printf("%f\n", (float)(clock() - start) / CLOCKS_PER_SEC);
-    clock_t old_start = clock();
+
     double score = 0;
     for (i = 0; i < n_queries; ++i) {
         if (queries[i].type == find_similar) {
@@ -146,10 +180,6 @@ int main(void) {
                                queries[i].data.find_similar_data.threshold);
             /*score += queries[i].reward;*/
             /*fprintf(stderr, "%f\n", score);*/
-
-            // printf("%f\n", (float)(clock() - old_start) / CLOCKS_PER_SEC);
-            // printf("%f\n", (float)(clock() - start) / CLOCKS_PER_SEC);
-            old_start = clock();
         }
     }
 
