@@ -1,4 +1,5 @@
 #include "api.h"
+
 #define HASHSIZE 19697
 #define INDEXSIZE 1000
 #define MAX_NMAILS 10000
@@ -70,86 +71,18 @@ int answer[MAX_NMAILS];
 
 TokenSet tokensets[MAX_NMAILS] = {NULL};
 
-TokenSet global_tokenset;
-double similaritys[MAX_NMAILS][MAX_NMAILS] = {0};
-
 // ========================================
-
-bool GlobalSetContains(int h, int h2) {
-    Node *node = global_tokenset.hash_table[h];
-    if (node != NULL && node->hash2 == h2) {
-        return true;
-    }
-    return false;
-}
-
-void parse_and_add_to_global_set(char *s) {
-    char *start = NULL;
-    char c;
-    unsigned long h = 5381;
-    unsigned long h2 = 2687;
-    int cnt;
-    while (c = *s) {
-        if (c >= 'A' && c <= 'Z') {
-            c = *s = c - 'A' + 'a';  // convert to lowercase
-        }
-        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) {
-            if (start) {
-                *s = '\0';
-                h = h % HASHSIZE;
-                h2 = h2 % HASHSIZE;
-                SetAdd(&global_tokenset, h, h2);
-                start = NULL;
-                h = 5381;
-                h2 = 2687;
-            }
-        } else if (!start) {
-            start = s;
-            h = ((h << 5) + h) + c;
-            h2 = ((h2 << 11) + h2) + c;
-        } else {
-            h = ((h << 5) + h) + c;
-            h2 = ((h2 << 11) + h2) + c;
-        }
-        ++s;
-    }
-    if (start)
-        SetAdd(&global_tokenset, (h % HASHSIZE), (h2 % HASHSIZE));  // start,
-}
 
 void parse_and_add_to_token_set(char *s, TokenSet *set) {
     char *start = NULL;
     char c;
-<<<<<<< HEAD
-    unsigned long h = 5381;
-    unsigned long h2 = 2687;
-    int cnt;
-    == == == =
->>>>>>> 21dd5956abac4b506d66eb7232e357753627d906
-                 while (c = *s) {
+    while (c = *s) {
         if (c >= 'A' && c <= 'Z')
             c = *s = c - 'A' + 'a';  // convert to lowercase
         if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) {
             if (start) {
                 *s = '\0';
-<<<<<<< HEAD
-                h = h % HASHSIZE;
-                h2 = h2 % HASHSIZE;
-                if (GlobalSetContains(h, h2)) {
-                    cnt++;
-                    if (cnt > 3) {
-                        start = NULL;
-                        break;
-                    }
-                } else if (!SetContains(set, h, h2)) {
-                    SetAdd(set, h, h2);
-                    cnt = 0;
-                } else {
-                    cnt = 0;
-                }
-                // start,
-                == == == = SetAdd(set, start);
->>>>>>> 21dd5956abac4b506d66eb7232e357753627d906
+                SetAdd(set, start);
                 start = NULL;
             }
         } else if (!start) {
@@ -175,10 +108,8 @@ double context_similarity(int i, int j) {
         if (SetContains(tokensets + j, node->s)) ++n_intersection;
         node = node->next;
     }
-    // n_intersection += global_tokenset.n_items;
-    return (double)(n_intersection + global_tokenset.n_items) /
-           (tokensets[i].n_items + tokensets[j].n_items - n_intersection +
-            global_tokenset.n_items);
+    return (double)n_intersection /
+           (tokensets[i].n_items + tokensets[j].n_items - n_intersection);
 }
 
 void find_similar_query(int query_id, int mail_id, double threshold) {
@@ -196,20 +127,15 @@ void find_similar_query(int query_id, int mail_id, double threshold) {
 // ========================================
 
 int main(void) {
-    clock_t start;
-    start = clock();
     api.init(&n_mails, &n_queries, &mails, &queries);
-    // printf("%f\n", (float)(clock() - start) / CLOCKS_PER_SEC);
+
     int i;
-    char common[50] = "I read the paragraph on http://wikipedia.org ";
-    global_tokenset.hash_table = malloc(HASHSIZE * sizeof(Node *));
-    parse_and_add_to_global_set(common);
+
     for (i = 0; i < n_mails; ++i) {
         parse_and_add_to_token_set(mails[i].subject, tokensets + mails[i].id);
         parse_and_add_to_token_set(mails[i].content, tokensets + mails[i].id);
     }
-    // printf("%f\n", (float)(clock() - start) / CLOCKS_PER_SEC);
-    clock_t old_start = clock();
+
     double score = 0;
     for (i = 0; i < n_queries; ++i) {
         if (queries[i].type == find_similar) {
@@ -218,10 +144,6 @@ int main(void) {
                                queries[i].data.find_similar_data.threshold);
             /*score += queries[i].reward;*/
             /*fprintf(stderr, "%f\n", score);*/
-
-            // printf("%f\n", (float)(clock() - old_start) / CLOCKS_PER_SEC);
-            // printf("%f\n", (float)(clock() - start) / CLOCKS_PER_SEC);
-            old_start = clock();
         }
     }
 
