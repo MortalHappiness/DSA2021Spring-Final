@@ -1,7 +1,7 @@
 #include "api.h"
 #define HASHSIZE 19697
 #define INDEXSIZE 1000
-#define HASHSIZE2 2147483647
+// #define HASHSIZE2 2147483647
 #define MAX_NMAILS 10000
 
 // ========================================
@@ -27,7 +27,10 @@ int hash(const char *str) {
     unsigned long hash = 5381;
     int c;
 
-    while (c = *s++) hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+    while (c = *s++) {
+        hash = ((hash << 5) + hash) + c;
+        // printf("%c, %d\n", c, c);
+    } /* hash * 33 + c */
 
     return (int)(hash % HASHSIZE);
 }
@@ -50,23 +53,6 @@ bool SetContains(TokenSet *set, int h, int h2) {  // const char *token,
         node = node->next;
     }
     return false;
-}
-
-// Add a token into the token set
-void SetAdd(TokenSet *set, int h, int h2) {  // const char *token,
-    Node *hash_node = (Node *)malloc(sizeof(Node));
-    Node *item_node = (Node *)malloc(sizeof(Node));
-
-    hash_node->next = set->hash_table[h];
-    hash_node->hash = h;
-    hash_node->hash2 = h2;
-    set->hash_table[h] = hash_node;
-
-    item_node->next = set->items;
-    item_node->hash = h;
-    item_node->hash2 = h2;
-    set->items = item_node;
-    ++(set->n_items);
 }
 
 // ========================================
@@ -93,12 +79,37 @@ bool GlobalSetContains(int h, int h2) {
     return false;
 }
 
+// Add a token into the token set
+void SetAdd(TokenSet *set, char *token) {  // const char *token,
+    int h = hash(token);
+    int h2 = hash2(token);
+    if (GlobalSetContains(h, h2)) {
+        return;
+    }
+    if (SetContains(set, h, h2)) {
+        return;
+    }
+    Node *hash_node = (Node *)malloc(sizeof(Node));
+    Node *item_node = (Node *)malloc(sizeof(Node));
+
+    hash_node->next = set->hash_table[h];
+    hash_node->hash = h;
+    hash_node->hash2 = h2;
+    set->hash_table[h] = hash_node;
+
+    item_node->next = set->items;
+    item_node->hash = h;
+    item_node->hash2 = h2;
+    set->items = item_node;
+    ++(set->n_items);
+}
+
 void parse_and_add_to_global_set(char *s) {
     char *start = NULL;
     char c;
-    unsigned long h = 5381;
-    unsigned long h2 = 2687;
-    int cnt;
+    // unsigned long h = 5381;
+    // unsigned long h2 = 2687;
+    // int cnt;
     while (c = *s) {
         if (c >= 'A' && c <= 'Z') {
             c = *s = c - 'A' + 'a';  // convert to lowercase
@@ -106,32 +117,32 @@ void parse_and_add_to_global_set(char *s) {
         if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) {
             if (start) {
                 *s = '\0';
-                h = h % HASHSIZE;
-                h2 = h2;
-                SetAdd(&global_tokenset, h, h2);
+                // h = h % HASHSIZE;
+                // h2 = h2;
+                SetAdd(&global_tokenset, start);
                 start = NULL;
-                h = 5381;
-                h2 = 2687;
+                // h = 5381;
+                // h2 = 2687;
             }
         } else if (!start) {
             start = s;
-            h = ((h << 5) + h) + c;
-            h2 = ((h2 << 11) + h2) + c;
+            // h = ((h << 5) + h) + c;
+            // h2 = ((h2 << 11) + h2) + c;
         } else {
-            h = ((h << 5) + h) + c;
-            h2 = ((h2 << 11) + h2) + c;
+            // h = ((h << 5) + h) + c;
+            // h2 = ((h2 << 11) + h2) + c;
         }
         ++s;
     }
-    if (start) SetAdd(&global_tokenset, (h % HASHSIZE), (h2));  // start,
+    if (start) SetAdd(&global_tokenset, start);  // start,
 }
 
 void parse_and_add_to_token_set(char *s, TokenSet *set) {
     char *start = NULL;
     char c;
-    unsigned long h = 5381;
-    unsigned long h2 = 2687;
-    int cnt;
+    // unsigned long h = 5381;
+    // unsigned long h2 = 2687;
+    // int cnt;
     while (c = *s) {
         if (c >= 'A' && c <= 'Z') {
             c = *s = c - 'A' + 'a';  // convert to lowercase
@@ -139,39 +150,36 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
         if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) {
             if (start) {
                 *s = '\0';
-                h = h % HASHSIZE;
+                // h = h % HASHSIZE;
                 // h2 = h2;
-                if (GlobalSetContains(h, h2)) {
-                    cnt++;
-                    if (cnt > 3) {
-                        start = NULL;
-                        break;
-                    }
-                } else if (!SetContains(set, h, h2)) {
-                    SetAdd(set, h, h2);
-                    cnt = 0;
-                } else {
-                    cnt = 0;
-                }
+                // if (GlobalSetContains(h % HASHSIZE, (int)h2)) {
+                //     cnt++;
+                //     if (cnt > 5) {
+                //         start = NULL;
+                //         break;
+                //     }
+                // } else {
+                SetAdd(set, start);
+                //     cnt = 0;
+                // }
                 // start,
                 start = NULL;
-                h = 5381;
-                h2 = 2687;
+                // h = 5381;
+                // h2 = 2687;
             }
         } else if (!start) {
             start = s;
-            h = ((h << 5) + h) + c;
-            h2 = ((h2 << 11) + h2) + c;
+            // h = ((h << 5) + h) + c;
+            // h2 = ((h2 << 11) + h2) + c;
         } else {
-            h = ((h << 5) + h) + c;
-            h2 = ((h2 << 11) + h2) + c;
+            // h = ((h << 5) + h) + c;
+            // h2 = ((h2 << 11) + h2) + c;
         }
         ++s;
     }
-    h = h % HASHSIZE;
+    // h = h % HASHSIZE;
     // h2 = h2;
-    if (start && !GlobalSetContains(h, h2) && !SetContains(set, h, h2))
-        SetAdd(set, h, h2);  // start,
+    if (start) SetAdd(set, start);  // start,
 }
 
 double context_similarity(int i, int j) {
@@ -220,9 +228,9 @@ void find_similar_query(int query_id, int mail_id, double threshold) {
 
 int main(void) {
     api.init(&n_mails, &n_queries, &mails, &queries);
-
+    clock_t start = clock();
     int i;
-    char common[50] = "I read the paragraph on http://wikipedia.org ";
+    char common[45] = "I read the paragraph on http://wikipedia.org ";
     global_tokenset.hash_table = malloc(HASHSIZE * sizeof(Node *));
     parse_and_add_to_global_set(common);
     for (i = 0; i < n_mails; ++i) {
@@ -233,15 +241,15 @@ int main(void) {
         parse_and_add_to_token_set(mails[i].subject, tokensets + mails[i].id);
         parse_and_add_to_token_set(mails[i].content, tokensets + mails[i].id);
     }
-
-    double score = 0;
+    // printf("%d\n", clock() - start);
+    // double score = 0;
     for (i = 0; i < n_queries; ++i) {
-        if (queries[i].type == find_similar && queries[i].reward <= 70) {
+        if (queries[i].type == find_similar && queries[i].reward >= 100) {
             find_similar_query(queries[i].id,
                                queries[i].data.find_similar_data.mid,
                                queries[i].data.find_similar_data.threshold);
-            score += queries[i].reward;
-            fprintf(stderr, "%f\n", score);
+            // score += queries[i].reward;
+            // fprintf(stderr, "%f\n", score);
         }
     }
 

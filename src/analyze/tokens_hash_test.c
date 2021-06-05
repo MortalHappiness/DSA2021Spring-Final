@@ -1,33 +1,34 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#define HASHSIZE 19645
+#define HASHSIZE 19697
 #define TOKENSIZE 138078
-#define HASHSIZE2 55511
+// #define HASHSIZE2 55511
 int ttt[HASHSIZE][20] = {0};
 
 int hash(const char *str) {
     const unsigned char *s = (unsigned char *)str;
-    unsigned long hash = 44;
+    unsigned long hash = 5381;
     int c;
 
     while (c = *s++) {
-        hash = ((hash << 9) + hash) + c; /* hash * 33 + c */
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+        printf("%c %d\n", c, c);
     }
 
     return (int)(hash % HASHSIZE);
 }
 
-int hash2(const char *str, int size, int i, int j) {
+int hash2(const char *str) {
     const unsigned char *s = (unsigned char *)str;
     unsigned long hash = 2687;
     int c;
 
     while (c = *s++) {
-        hash = ((hash << j) + hash) + c; /* hash * 33 + c */
+        hash = ((hash << 11) + hash) + c; /* hash * 33 + c */
     }
 
-    return (int)(hash % size);
+    return (int)(hash);
 }
 
 int main() {
@@ -50,46 +51,47 @@ int main() {
     //     ttt[tmp] = 0;
     // }
     int success = 1;
-    for (int size = 56001; size > 10000; size -= 2) {
-        for (int j = 0; j < 32; j++) {
-            for (int i = 0; i < HASHSIZE; i++) {
-                for (int j = 0; j < 20; j++) {
-                    ttt[i][j] = 0;
-                }
-            }
-            success = 1;
-            for (int token = 0; token < TOKENSIZE; token++) {
-                int idx = hash(tokens[token]);
-                int h2 = hash2(tokens[token], size, 0, j);
-                int tmp = 0;
-                while (ttt[idx][tmp] != 0) {
-                    if (ttt[idx][tmp] == h2) {
-                        success = 0;
-                        break;
-                    }
-                    tmp++;
-                }
-                ttt[idx][tmp] = h2;
-                if (!success) {
-                    break;
-                }
-            }
-            if (success) {
-                printf("%d, j: %d\n", size, j);
-            }
+    // for (int size = 56001; size > 10000; size -= 2) {
+    // for (int j = 0; j < 32; j++) {
+    for (int i = 0; i < HASHSIZE; i++) {
+        for (int j = 0; j < 20; j++) {
+            ttt[i][j] = 0;
         }
     }
-    // int cnt = 0;
-    // for (int i = 0; i < HASHSIZE; i++) {
-    //     int tmp = 0;
-    //     while (ttt[i][tmp] != 0) {
-    //         cnt++;
-    //         printf("%d ", ttt[i][tmp]);
-    //         tmp++;
-    //     }
-    //     printf("\n");
+    success = 1;
+    for (int token = 0; token < TOKENSIZE; token++) {
+        int idx = hash(tokens[token]);
+        int h2 = hash2(tokens[token]);
+        int tmp = 0;
+        while (ttt[idx][tmp] != 0) {
+            if (ttt[idx][tmp] == h2) {
+                success = 0;
+                printf("fail\n");
+                // break;
+            }
+            tmp++;
+        }
+        ttt[idx][tmp] = h2;
+        if (!success) {
+            break;
+        }
+    }
+    // if (success) {
+    //     printf("%d, j: %d\n", size, j);
     // }
-    // printf("total: %d\n", cnt);
+    // }
+    // }
+    int cnt = 0;
+    for (int i = 0; i < HASHSIZE; i++) {
+        int tmp = 0;
+        while (ttt[i][tmp] != 0) {
+            cnt++;
+            // printf("%d ", ttt[i][tmp]);
+            tmp++;
+        }
+        // printf("\n");
+    }
+    printf("total: %d\n", cnt);
     // if (max < global_min) {
     //     global_min = max;
     //     printf("global min: %d, i: %d, j: %d, k: %d\n", global_min, i, j,
