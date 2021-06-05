@@ -8,5 +8,8 @@ validator/validator: validator/validator.cpp
 run: main validator/validator
 	./main < testdata/test.in | validator/validator
 
+output: main
+	./main < testdata/test.in 
+
 test: main
 	./main < testdata/test.in > out

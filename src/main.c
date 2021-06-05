@@ -1,10 +1,8 @@
 #include "api.h"
 #define HASHSIZE 10461365
-// #define INDEXSIZE 1000
-// #define HASHSIZE2 2147483647
 #define MAX_NMAILS 10000
 #define TOKENSIZE 138078
-#define BITMAP_LEN 17260
+#define BITMAP_LEN 4315
 // ========================================
 // Token set implementation
 
@@ -24,7 +22,9 @@ typedef struct {
 
 typedef struct {
     int n_items;
-    unsigned char bitmap[17260];
+    unsigned int bitmap[BITMAP_LEN];
+    int top;
+    int stack[BITMAP_LEN];
 } TokenSet;
 // Hash function for string
 // Reference:
@@ -36,7 +36,6 @@ int hash(const char *str) {
 
     while (c = *s++) {
         hash = ((hash << 9) + hash) + c;
-        // printf("%c, %d\n", c, c);
     } /* hash * 33 + c */
 
     return (int)(hash % HASHSIZE);
@@ -52,16 +51,6 @@ int hash2(const char *str) {
     return (int)(hash);
 }
 
-// See whether token in the token set or not
-// bool SetContains(TokenSet *set, int h) {  // const char *token,
-//     // int offset = h % 8;
-//     // int idx = h >> 3;
-//     if (set->bitmap[h >> 3] & (1 << (h % 8)) == 0) {
-//         return false;
-//     }
-//     return true;
-// }
-
 // ========================================
 // Global variables
 
@@ -69,13 +58,11 @@ int n_mails, n_queries;
 mail *mails;
 query *queries;
 int token_num = 0;
-// int max_collision = 0;
 
 int answer[MAX_NMAILS];
 
 TokenSet tokensets[MAX_NMAILS] = {NULL};
 
-// int *hash_table_cnt;
 GlobalTokenSet global_tokenset;
 
 double similaritys[MAX_NMAILS][MAX_NMAILS] = {0};
@@ -84,15 +71,14 @@ double similaritys[MAX_NMAILS][MAX_NMAILS] = {0};
 
 int GlobalSetContains(int h, int h2) {
     Node *node = global_tokenset.hash_table[h];
-    // if (!strcmp("175", token)) {
-    //     printf()
-    // }
+
     while (node != NULL) {
         if (h2 == node->hash2) {
             return node->num;
         }
         node = node->next;
     }
+
     return -1;
 }
 
@@ -105,58 +91,25 @@ int GlobalSetAdd(char *token) {  // const char *token,
     if (num != -1) {
         return num;
     }
-    // if (!strcmp(token, "175")) {
-    //     printf("token: %s, h: %d, h2: %d\n", token, h, h2);
-    // }
+
     Node *hash_node = (Node *)malloc(sizeof(Node));
     Node *item_node = (Node *)malloc(sizeof(Node));
 
     hash_node->next = global_tokenset.hash_table[h];
-    // hash_node->hash = h;
     hash_node->hash2 = h2;
     hash_node->num = token_num;
-    // hash_node->s = token;
     global_tokenset.hash_table[h] = hash_node;
-
-    // item_node->next = global_tokenset.items;
-    // item_node->hash = h;
-    // item_node->hash2 = h2;
-    // item_node->num = token_num;
-    // item_node->s = token;
-    // global_tokenset.items = item_node;
+    // printf("%s %d\n", token, token_num);
     ++(global_tokenset.n_items);
     token_num++;
-    // hash_table_cnt[h]++;
-    // printf("%s\n", token);
     return hash_node->num;
 }
-
-// void parse_and_add_to_global_set(char *s) {
-//     char *start = NULL;
-//     char c;
-//     while (c = *s) {
-//         if (c >= 'A' && c <= 'Z') {
-//             c = *s = c - 'A' + 'a';  // convert to lowercase
-//         }
-//         if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) {
-//             if (start) {
-//                 *s = '\0';
-//                 int num = GlobalSetAdd(start);
-
-//                 start = NULL;
-//             }
-//         } else if (!start) {
-//             start = s;
-//         }
-//         ++s;
-//     }
-//     if (start) GlobalSetAdd(&global_tokenset, start);  // start,
-// }
 
 void parse_and_add_to_token_set(char *s, TokenSet *set) {
     char *start = NULL;
     char c;
     unsigned int num;
+    int idx;
     while (c = *s) {
         if (c >= 'A' && c <= 'Z') {
             c = *s = c - 'A' + 'a';  // convert to lowercase
@@ -169,13 +122,16 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
                 // printf("%d\n",
                 //    (unsigned int)set->bitmap[num >> 3] & (1 << (num %
                 //    8)));
-                if ((set->bitmap[num >> 3] & (1 << (num % 8))) == 0) {
-                    // printf("here\n");
+                idx = num >> 5;
+                if (((set->bitmap[idx] >> (num % 32)) & 1) == 0) {
+                    // printf("idx: %d, bitmap: %d, n_items: %d\n", idx,
+                    //        set->bitmap[idx], set->n_items);
+                    // printf("%s\n", start);
                     set->n_items++;
-                    // printf("%s, num: %d, num//8: %d\n", start, num, num >>
-                    // 3); printf("%d ", set->bitmap[num >> 3]);
-                    set->bitmap[num >> 3] |= (1 << (num % 8));
-                    // printf("%d\n", set->bitmap[num >> 3]);
+                    if (set->bitmap[idx] == 0) {
+                        set->stack[set->top++] = idx;
+                    }
+                    set->bitmap[idx] |= (1 << (num % 32));
                 }
                 start = NULL;
             }
@@ -186,38 +142,52 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
     }
     if (start) {
         num = GlobalSetAdd(start);
-        if (set->bitmap[num >> 3] & (1 << (num % 8)) == 0) {
+        idx = num >> 5;
+        if (set->bitmap[idx] & (1 << (num % 32)) == 0) {
             set->n_items++;
-            set->bitmap[num >> 3] |= 1 << (num % 8);
+            // printf("idx: %d, bitmap: %d, n_items: %d\n", idx,
+            // set->bitmap[idx],
+            //    set->n_items);
+            // printf("%s\n", start);
+            if (set->bitmap[idx] == 0) {
+                set->stack[set->top++] = idx;
+                // set->top++;
+            }
+            set->bitmap[idx] |= 1 << (num % 32);
         }
+        // printf("here\n");
     }
 }
 
 double context_similarity(int i, int j) {
     Node *node;
-    int n_intersection = 0;
-    int n;
-    // if (tokensets[i].n_items > tokensets[j].n_items) {
-    //     temp = i;
-    //     i = j;
-    //     j = temp;
-    // }
+    int temp, n_intersection = 0;
+    unsigned int n;
+    if (tokensets[i].top > tokensets[j].top) {
+        temp = i;
+        i = j;
+        j = temp;
+    }
     // node = tokensets[i].items;
-    for (int tmp = 0; tmp < BITMAP_LEN; tmp++) {
-        n = ((u_int8_t)(tokensets[i].bitmap[tmp]) &
-             (u_int8_t)(tokensets[j].bitmap[tmp]));
+    for (int tmp = 0; tmp < tokensets[i].top; tmp++) {
+        n = (tokensets[i].bitmap[tokensets[i].stack[tmp]]) &
+            (tokensets[j].bitmap[tokensets[i].stack[tmp]]);
         while (n != 0) {
             n = n & (n - 1);
             n_intersection++;
         }
     }
-    // n_intersection = 0;
-    // while (node) {
-    //     if (SetContains(tokensets + j, node->hash, node->hash2))  // node->s,
-    //         ++n_intersection;
-    //     node = node->next;
+
+    // for (int tmp = 0; tmp < BITMAP_LEN; tmp++) {
+    //     n = ((tokensets[i].bitmap[tmp]) & (tokensets[j].bitmap[tmp]));
+    //     // printf("%08x, %08x, %08x\n", tokensets[i].bitmap[tmp],
+    //     //    tokensets[j].bitmap[tmp], n);
+    //     while (n != 0) {
+    //         n = n & (n - 1);
+    //         n_intersection++;
+    //     }
     // }
-    // n_intersection += global_tokenset.n_items;
+    // printf("%d\n", n_intersection);
     return (double)(n_intersection) /
            (tokensets[i].n_items + tokensets[j].n_items - n_intersection);
 }
@@ -253,23 +223,27 @@ int main(void) {
     // hash_table_cnt = malloc(HASHSIZE * sizeof(int));
     // parse_and_add_to_global_set(common);
     for (i = 0; i < n_mails; ++i) {
-        // for (int j = 0; j < n_mails; ++j) {
-        //     similaritys[i][j] = -1;
-        // }
-        // tokensets[i].hash_table = malloc(HASHSIZE * sizeof(Node *));
         parse_and_add_to_token_set(mails[i].subject, tokensets + mails[i].id);
         parse_and_add_to_token_set(mails[i].content, tokensets + mails[i].id);
+        // for (int tmp = 0; tmp < BITMAP_LEN; tmp++) {
+        //     printf("%ld|", tokensets[i].bitmap[tmp]);
+        // }
+        // printf("\n");
+        // printf("%d\n", tokensets[i].n_items);
+        // printf("top: %d--------------\n", tokensets[i].n_items);
     }
     // printf("%d\n", clock() - start);
     // printf("global_n_itmes: %d, offset_num: %d\n", global_tokenset.n_items,
     //        token_num);
     // printf("tokensets[0].items: %d\n", tokensets[0].n_items);
-    // for (int kkk = 0; kkk < 13; kkk++) {
-    //     printf("%d", tokensets[0].bitmap[kkk]);
+    // for (int kkk = 0; kkk < tokensets[0].top; kkk++) {
+    //     printf("%d\n", tokensets->stack[kkk]);
+    //     printf("%08x\n", tokensets[0].bitmap[tokensets->stack[kkk]]);
     // }
+    // printf("\n");
     double score = 0;
     for (i = 0; i < n_queries; ++i) {
-        if (queries[i].type == find_similar && queries[i].reward >= 100) {
+        if (queries[i].type == find_similar) {  //&& queries[i].reward >= 100
             find_similar_query(queries[i].id,
                                queries[i].data.find_similar_data.mid,
                                queries[i].data.find_similar_data.threshold);
