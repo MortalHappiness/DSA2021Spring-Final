@@ -1,8 +1,9 @@
 #include "api.h"
-#define HASHSIZE 10461365
+#define HASHSIZE 247479207  // 10461365
+// 247483383
 #define MAX_NMAILS 10000
 #define TOKENSIZE 138078
-#define BITMAP_LEN 4315
+#define BITMAP_LEN 2158
 // ========================================
 // Token set implementation
 
@@ -11,7 +12,8 @@ typedef struct Node {
     // int hash;
     // int hash2;
     int num;
-    char *s;
+    // char *s;
+    int len;
 } Node;
 
 typedef struct {
@@ -22,7 +24,7 @@ typedef struct {
 
 typedef struct {
     int n_items;
-    unsigned int bitmap[BITMAP_LEN];
+    unsigned long long bitmap[BITMAP_LEN];
     int top;
     int stack[BITMAP_LEN];
 } TokenSet;
@@ -35,11 +37,21 @@ int hash(const char *str) {
     int c;
 
     while (c = *s++) {
-        hash = ((hash << 9) + hash) + c;
+        hash = ((hash << 7) + hash) + c;
     } /* hash * 33 + c */
 
     return (int)(hash % HASHSIZE);
 }
+
+// int hash2(const char *str) {
+//     const unsigned char *s = (unsigned char *)str;
+//     unsigned long hash = 2687;
+//     int c;
+
+//     while (c = *s++) hash = ((hash << 11) + hash) + c; /* hash * 33 + c */
+
+//     return (int)(hash);
+// }
 
 // ========================================
 // Global variables
@@ -59,11 +71,11 @@ double similaritys[MAX_NMAILS][MAX_NMAILS] = {0};
 
 // ========================================
 
-int GlobalSetContains(int h, char*token) {
+int GlobalSetContains(int h, int len) {
     Node *node = global_tokenset.hash_table[h];
 
     while (node != NULL) {
-        if (!strcmp(token, node->s)) {
+        if (node->len == len) {
             return node->num;
         }
         node = node->next;
@@ -73,10 +85,9 @@ int GlobalSetContains(int h, char*token) {
 }
 
 // Add a token into the token set
-int GlobalSetAdd(char *token) {  // const char *token,
+int GlobalSetAdd(char *token, int len) {  // const char *token,
     int h = hash(token);
-
-    int num = GlobalSetContains(h, token);
+    int num = GlobalSetContains(h, len);
     if (num != -1) {
         return num;
     }
@@ -86,7 +97,7 @@ int GlobalSetAdd(char *token) {  // const char *token,
 
     hash_node->next = global_tokenset.hash_table[h];
     hash_node->num = token_num;
-    hash_node->s = token;
+    hash_node->len = len;
     global_tokenset.hash_table[h] = hash_node;
 
     ++(global_tokenset.n_items);
@@ -97,7 +108,7 @@ int GlobalSetAdd(char *token) {  // const char *token,
 void parse_and_add_to_token_set(char *s, TokenSet *set) {
     char *start = NULL;
     char c;
-    unsigned int num;
+    int num;
     int idx;
     while (c = *s) {
         if (c >= 'A' && c <= 'Z') {
@@ -106,14 +117,14 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
         if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) {
             if (start) {
                 *s = '\0';
-                num = GlobalSetAdd(start);
-                idx = num >> 5;
-                if (((set->bitmap[idx] >> (num % 32)) & 1) == 0) {
+                num = GlobalSetAdd(start, s - start);
+                idx = num >> 6;
+                if (((set->bitmap[idx] >> (num % 64)) & 1) == 0) {
                     set->n_items++;
                     if (set->bitmap[idx] == 0) {
                         set->stack[set->top++] = idx;
                     }
-                    set->bitmap[idx] |= (1 << (num % 32));
+                    set->bitmap[idx] |= (1ULL << (num % 64));
                 }
                 start = NULL;
             }
@@ -123,14 +134,14 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
         ++s;
     }
     if (start) {
-        num = GlobalSetAdd(start);
-        idx = num >> 5;
-        if (((set->bitmap[idx] >> (num % 32)) & 1) == 0) {
+        num = GlobalSetAdd(start, s - start);
+        idx = num >> 6;
+        if (((set->bitmap[idx] >> (num % 64)) & 1) == 0) {
             set->n_items++;
             if (set->bitmap[idx] == 0) {
                 set->stack[set->top++] = idx;
             }
-            set->bitmap[idx] |= 1 << (num % 32);
+            set->bitmap[idx] |= (1ULL << (num % 64));
         }
     }
 }
@@ -138,7 +149,7 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
 double context_similarity(int i, int j) {
     Node *node;
     int temp, n_intersection = 0;
-    unsigned int n;
+    unsigned long long n;
     if (tokensets[i].top > tokensets[j].top) {
         temp = i;
         i = j;
@@ -182,21 +193,24 @@ void find_similar_query(int query_id, int mail_id, double threshold) {
 
 int main(void) {
     api.init(&n_mails, &n_queries, &mails, &queries);
-    // clock_t start = clock();
     int i;
     global_tokenset.hash_table = malloc(HASHSIZE * sizeof(Node *));
     for (i = 0; i < n_mails; ++i) {
         parse_and_add_to_token_set(mails[i].subject, tokensets + mails[i].id);
         parse_and_add_to_token_set(mails[i].content, tokensets + mails[i].id);
+        // for (int j = 0; j < BITMAP_LEN; j++) {
+        //     printf("%llu|", tokensets[i].bitmap[j]);
+        // }
+        // printf("\n");
     }
-
+    double score;
     for (i = 0; i < n_queries; ++i) {
-        if (queries[i].type == find_similar && queries[i].reward >= 100) {  //
+        if (queries[i].type == find_similar && (queries[i].reward >= 100)) {
             find_similar_query(queries[i].id,
                                queries[i].data.find_similar_data.mid,
                                queries[i].data.find_similar_data.threshold);
-            // score += queries[i].reward;
-            // fprintf(stderr, "%f\n", score);
+            score += queries[i].reward;
+            fprintf(stderr, "%f\n", score);
         }
     }
 
