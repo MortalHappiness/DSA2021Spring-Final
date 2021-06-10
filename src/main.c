@@ -8,6 +8,7 @@
 #define MAX_NMAILS 10000
 #define TOKENSIZE 138078
 #define BITMAP_LEN 2158
+#define MAX_TOKENS_PER_EMAIL 3416
 // ========================================
 // Token set implementation
 
@@ -29,8 +30,8 @@ typedef struct {
 typedef struct {
     int n_items;
     unsigned long long bitmap[BITMAP_LEN];
-    int top;
-    int stack[BITMAP_LEN];
+    // int top;
+    int stack[MAX_TOKENS_PER_EMAIL];
 } TokenSet;
 // Hash function for string
 // Reference:
@@ -192,11 +193,14 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
                 if (num > -1) {
                     idx = num >> 6;
                     if (((set->bitmap[idx] >> (num & 63)) & 1) == 0) {
-                        set->n_items++;
-                        if (set->bitmap[idx] == 0) {
-                            set->stack[set->top++] = idx;
-                        }
+                        // set->n_items++;
+                        // if (set->bitmap[idx] == 0) {
+                        //     set->stack[set->top++] = idx;
+                        // }
+                        // printf("before stack\n");
+                        set->stack[set->n_items++] = num;
                         set->bitmap[idx] |= (1ULL << (num & 63));
+                        // printf("after stack\n");
                     }
                 }
                 start = NULL;
@@ -211,10 +215,11 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
         if (num > -1) {
             idx = num >> 6;
             if (((set->bitmap[idx] >> (num % 64)) & 1) == 0) {
-                set->n_items++;
-                if (set->bitmap[idx] == 0) {
-                    set->stack[set->top++] = idx;
-                }
+                // set->n_items++;
+                // if (set->bitmap[idx] == 0) {
+                //     set->stack[set->top++] = idx;
+                // }
+                set->stack[set->n_items++] = num;
                 set->bitmap[idx] |= (1ULL << (num % 64));
             }
         }
@@ -225,19 +230,24 @@ double context_similarity(int i, int j) {
     Node *node;
     int temp, n_intersection = 0;
     unsigned long long n;
-    if (tokensets[i].top > tokensets[j].top) {
+    if (tokensets[i].n_items > tokensets[j].n_items) {
         temp = i;
         i = j;
         j = temp;
     }
-
-    for (int tmp = 0; tmp < tokensets[i].top; tmp++) {
-        n = (tokensets[i].bitmap[tokensets[i].stack[tmp]]) &
-            (tokensets[j].bitmap[tokensets[i].stack[tmp]]);
-        while (n != 0ULL) {
-            n = n & (n - 1ULL);
+    int idx;
+    for (int tmp = 0; tmp < tokensets[i].n_items; tmp++) {
+        idx = tokensets[i].stack[tmp] >> 6;
+        // printf("%d %d\n", tokensets[i].stack[tmp], idx);
+        if ((tokensets[j].bitmap[idx] >> (tokensets[i].stack[tmp] % 64)) & 1) {
             n_intersection++;
         }
+        // n = (tokensets[i].bitmap[tokensets[i].stack[tmp]]) &
+        //     (tokensets[j].bitmap[tokensets[i].stack[tmp]]);
+        // while (n != 0ULL) {
+        //     n = n & (n - 1ULL);
+        //     n_intersection++;
+        // }
     }
     // printf("n_intersection: %d\n", n_intersection);
     return (double)(n_intersection + 8) /
@@ -294,11 +304,11 @@ int main(void) {
         //     printf("%d|", tokensets[i].stack[j]);
         // }
         // printf("\n");
-
+        // printf("%d\n", i);
         // printf("%d\n", tokensets[i].n_items);
     }
-
-    double score;
+    // printf("success init\n");
+    // double score;
     for (i = 0; i < n_queries; ++i) {
         if (queries[i].type == find_similar &&
             (queries[i].reward >= 96)) {  //&&
