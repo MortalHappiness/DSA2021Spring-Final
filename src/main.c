@@ -359,11 +359,6 @@ void group_analyse_query(int query_id, const int *mids, int len) {
 
     for (i = 0; i < MAX_USERS; ++i)
         DSetInit(disjoint_set, i);
-    for (i = 0; i < len; ++i) {
-        id = mids[i];
-        user1 = edges[id][0];
-        user2 = edges[id][1];
-    }
 
     largest_group = 1;
     for (i = 0; i < len; ++i) {
