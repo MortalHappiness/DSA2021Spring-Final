@@ -432,10 +432,8 @@ int main(void) {
                                 queries[i].data.group_analyse_data.len);
             /*score += queries[i].reward;*/
             /*fprintf(stderr, "%f\n", score);*/
-        }
-    }
-    for (i = 0; i < n_queries; ++i) {
-        if (queries[i].type == find_similar && queries[i].reward >= 96) {
+        } else if (queries[i].type == find_similar &&
+                   queries[i].reward >= 100) {
             find_similar_query(queries[i].id,
                                queries[i].data.find_similar_data.mid,
                                queries[i].data.find_similar_data.threshold);
