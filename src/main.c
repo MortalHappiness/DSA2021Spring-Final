@@ -427,13 +427,6 @@ int main(void) {
 
     double score = 0;
     for (i = 0; i < n_queries; ++i) {
-        /*if (queries[i].type == find_similar && queries[i].reward >= 96) {*/
-        /*    find_similar_query(queries[i].id,*/
-        /*                       queries[i].data.find_similar_data.mid,*/
-        /*                       queries[i].data.find_similar_data.threshold);*/
-        /*    score += queries[i].reward;*/
-        /*    fprintf(stderr, "%f\n", score);*/
-        /*}*/
         /*if (queries[i].type == expression_match) {*/
         /*    expression_match_query(*/
         /*        queries[i].id,*/
@@ -445,6 +438,13 @@ int main(void) {
             group_analyse_query(queries[i].id,
                                 queries[i].data.group_analyse_data.mids,
                                 queries[i].data.group_analyse_data.len);
+            /*score += queries[i].reward;*/
+            /*fprintf(stderr, "%f\n", score);*/
+        }
+        if (queries[i].type == find_similar && queries[i].reward >= 96) {
+            find_similar_query(queries[i].id,
+                               queries[i].data.find_similar_data.mid,
+                               queries[i].data.find_similar_data.threshold);
             /*score += queries[i].reward;*/
             /*fprintf(stderr, "%f\n", score);*/
         }
