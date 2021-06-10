@@ -1,11 +1,31 @@
 #include "api.h"
 
-#define HASHSIZE   19697
-#define INDEXSIZE  1000
+#define HASHSIZE   200003
 #define MAX_NMAILS 10000
 
-#define MAX_TOKENS           140000 // 138078
-#define MAX_TOKENS_PER_EMAIL 4000   // 3416
+#define MAX_TOKENS           138078 // 138078
+#define MAX_TOKENS_PER_EMAIL 3416   // 3416
+
+// ========================================
+// Bitset implementation
+
+typedef int BitsetItem;
+#define WORD_BITS   (sizeof(BitsetItem) << 3)
+#define BITSET_SIZE ((MAX_TOKENS / WORD_BITS) + 1)
+
+// Return bitset[idx]
+inline BitsetItem BitsetGet(BitsetItem *bitset, int idx) {
+    int item_idx = idx / WORD_BITS;
+    int offset = idx % WORD_BITS;
+    return bitset[item_idx] & (1 << offset);
+}
+
+// Set bitset[idx] = 1
+inline void BitsetSet(BitsetItem *bitset, int idx) {
+    int item_idx = idx / WORD_BITS;
+    int offset = idx % WORD_BITS;
+    bitset[item_idx] |= (1 << offset);
+}
 
 // ========================================
 // Dictionary implementation (key: string, value: non-negative int)
@@ -68,7 +88,7 @@ void DictSet(Node **table, const char *key, int value) {
 // Token set implementation
 
 typedef struct {
-    bool set[MAX_TOKENS];
+    BitsetItem bitset[BITSET_SIZE];
     int tokens[MAX_TOKENS_PER_EMAIL];
     int n_tokens;
 } TokenSet;
@@ -97,8 +117,8 @@ void SetAdd(TokenSet *set, const char *s) {
         id = current_id;
         DictSet(token_table, s, current_id++);
     }
-    if (!(set->set[id])) {
-        set->set[id] = true;
+    if (!(BitsetGet(set->bitset, id))) {
+        BitsetSet(set->bitset, id);
         set->tokens[(set->n_tokens)++] = id;
     }
 }
@@ -138,7 +158,7 @@ double context_similarity(int i, int j) {
     n_intersection = 0;
     for (temp = 0; temp < tokensets[i].n_tokens; ++temp) {
         token_id = tokensets[i].tokens[temp];
-        if (tokensets[j].set[token_id])
+        if (BitsetGet(tokensets[j].bitset, token_id))
             ++n_intersection;
     }
     double ans =
