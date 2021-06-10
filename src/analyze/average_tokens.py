@@ -6,6 +6,7 @@ with open("../testdata/test.in") as fin:
     next(fin)
     avg_tokens = 0
     avg_unique_tokens = 0
+    max_unique_tokens = 0
     for i in range(10000):
         next(fin)
         next(fin)
@@ -17,7 +18,10 @@ with open("../testdata/test.in") as fin:
         tokens = re.findall("[A-Za-z0-9]+", data)
         tokens = [token.lower() for token in tokens]
         avg_tokens += len(tokens)
-        avg_unique_tokens += len(set(tokens))
+        unique = len(set(tokens))
+        avg_unique_tokens += unique
+        max_unique_tokens = max(max_unique_tokens, unique)
 
 print("Average number of tokens in each email =", avg_tokens / 10000)
 print("Average number of unique tokens in each email =", avg_unique_tokens / 10000)
+print("Max number of unique tokens in each email =", max_unique_tokens)
