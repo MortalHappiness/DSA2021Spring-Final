@@ -367,6 +367,7 @@ void group_analyse_query(int query_id, const int *mids, int len) {
         user2 = edges[id][1];
         if (DSetFind(disjoint_set, user1) == DSetFind(disjoint_set, user2))
             continue;
+        // TODO: return size in DSetUnion
         DSetUnion(disjoint_set, user1, user2);
         idx = DSetFind(disjoint_set, user1);
         new_size = disjoint_set[idx].size;
