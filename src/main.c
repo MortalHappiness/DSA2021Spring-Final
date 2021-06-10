@@ -346,7 +346,6 @@ void expression_match_query(int query_id, const char *expression) {
 
 void group_analyse_query(int query_id, const int *mids, int len) {
     int i, id, user1, user2, n_groups, largest_group, idx, new_size;
-    bool users[MAX_USERS] = {0};
     bool groups[MAX_USERS] = {0};
 
     for (i = 0; i < MAX_USERS; ++i) DSetInit(disjoint_set, i);
@@ -354,8 +353,6 @@ void group_analyse_query(int query_id, const int *mids, int len) {
         id = mids[i];
         user1 = edges[id][0];
         user2 = edges[id][1];
-        users[user1] = true;
-        users[user2] = true;
     }
 
     largest_group = 1;
