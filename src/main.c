@@ -6,6 +6,12 @@
 #define MAX_TOKENS           138078 // 138078
 #define MAX_TOKENS_PER_EMAIL 3416   // 3416
 
+#define MAX_EXPRESSION_LEN 2048
+
+#define OP_NOT (-1)
+#define OP_AND (-2)
+#define OP_OR  (-3)
+
 // ========================================
 // Bitset implementation
 
@@ -184,6 +190,130 @@ void find_similar_query(int query_id, int mail_id, double threshold) {
     api.answer(query_id, answer, answer_length);
 }
 
+inline int _precedence(char c) {
+    switch (c) {
+        case '!':
+            return 3;
+        case '&':
+            return 2;
+        case '|':
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+inline int _translate_to_op(char c) {
+    switch (c) {
+        case '!':
+            return OP_NOT;
+        case '&':
+            return OP_AND;
+        case '|':
+            return OP_OR;
+        default:
+            return -100;
+    }
+}
+
+bool expression_match_single(const int *postfix, int postfix_len, int id) {
+    int i, token;
+    bool stack[MAX_EXPRESSION_LEN];
+    int stack_size = 0;
+    for (i = 0; i < postfix_len; ++i) {
+        token = postfix[i];
+        if (token >= 0) {
+            stack[stack_size++] = BitsetGet(tokensets[id].bitset, token);
+        } else {
+            switch (token) {
+                case OP_NOT:
+                    stack[stack_size - 1] = !stack[stack_size - 1];
+                    break;
+                case OP_AND:
+                    stack[stack_size - 2] &= stack[stack_size - 1];
+                    --stack_size;
+                    break;
+                case OP_OR:
+                    stack[stack_size - 2] |= stack[stack_size - 1];
+                    --stack_size;
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+    return stack[0];
+}
+
+void expression_match_query(int query_id, const char *expression) {
+    int i, answer_length, buf_idx, id;
+    char c, c1;
+
+    int postfix[MAX_EXPRESSION_LEN];
+    int postfix_len = 0;
+    char buf[MAX_EXPRESSION_LEN];
+    char stack[MAX_EXPRESSION_LEN];
+    int stack_size = 0;
+
+    // Parse to postfix expression
+    buf_idx = 0;
+    for (i = 0; i <= strlen(expression); ++i) {
+        c = expression[i];
+        if (c >= 'A' && c <= 'Z')
+            c = c - 'A' + 'a'; // convert to lowercase
+        if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
+            buf[buf_idx++] = c;
+            continue;
+        }
+        if (buf_idx) {
+            buf[buf_idx] = '\0';
+            id = DictGet(token_table, buf);
+            postfix[postfix_len++] = id;
+            buf_idx = 0;
+        }
+        switch (c) {
+            case '(':
+                stack[stack_size++] = '(';
+                break;
+            case ')':
+                while (stack_size--) {
+                    c1 = stack[stack_size];
+                    if (c1 == '(')
+                        break;
+                    postfix[postfix_len++] = _translate_to_op(c1);
+                }
+                break;
+            case '!':
+            case '&':
+            case '|':
+                while (stack_size) {
+                    c1 = stack[stack_size - 1];
+                    if (_precedence(c1) < _precedence(c))
+                        break;
+                    --stack_size;
+                    postfix[postfix_len++] = _translate_to_op(c1);
+                }
+                stack[stack_size++] = c;
+                break;
+            case '\0':
+                while (stack_size--) {
+                    c1 = stack[stack_size];
+                    postfix[postfix_len++] = _translate_to_op(c1);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    answer_length = 0;
+    for (i = 0; i < MAX_NMAILS; ++i) {
+        if (expression_match_single(postfix, postfix_len, i))
+            answer[answer_length++] = i;
+    }
+    api.answer(query_id, answer, answer_length);
+}
+
 // ========================================
 
 int main(void) {
@@ -198,10 +328,17 @@ int main(void) {
 
     double score = 0;
     for (i = 0; i < n_queries; ++i) {
-        if (queries[i].type == find_similar && (queries[i].reward >= 96)) {
-            find_similar_query(queries[i].id,
-                               queries[i].data.find_similar_data.mid,
-                               queries[i].data.find_similar_data.threshold);
+        /*if (queries[i].type == find_similar && queries[i].reward >= 96) {*/
+        /*    find_similar_query(queries[i].id,*/
+        /*                       queries[i].data.find_similar_data.mid,*/
+        /*                       queries[i].data.find_similar_data.threshold);*/
+        /*    score += queries[i].reward;*/
+        /*    fprintf(stderr, "%f\n", score);*/
+        /*}*/
+        if (queries[i].type == expression_match) {
+            expression_match_query(
+                queries[i].id,
+                queries[i].data.expression_match_data.expression);
             /*score += queries[i].reward;*/
             /*fprintf(stderr, "%f\n", score);*/
         }
