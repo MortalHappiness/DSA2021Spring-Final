@@ -5,6 +5,7 @@
 
 #define MAX_TOKENS           138078 // 138078
 #define MAX_TOKENS_PER_EMAIL 3416   // 3416
+#define MAX_USERS            560
 
 #define MAX_EXPRESSION_LEN 2048
 
@@ -100,6 +101,40 @@ typedef struct {
 } TokenSet;
 
 // ========================================
+// Disjoint set implementation
+
+typedef struct {
+    int parent;
+    int size;
+} DSetNode;
+
+inline void DSetInit(DSetNode *disjoint_set, int idx) {
+    disjoint_set[idx].parent = idx;
+    disjoint_set[idx].size = 1;
+}
+
+int DSetFind(DSetNode *disjoint_set, int x) {
+    if (x != disjoint_set[x].parent)
+        disjoint_set[x].parent = DSetFind(disjoint_set, disjoint_set[x].parent);
+    return disjoint_set[x].parent;
+}
+
+void DSetLink(DSetNode *disjoint_set, int x, int y) {
+    if (disjoint_set[x].size > disjoint_set[y].size) {
+        disjoint_set[y].parent = x;
+        disjoint_set[x].size += disjoint_set[y].size;
+    } else {
+        disjoint_set[x].parent = y;
+        disjoint_set[y].size += disjoint_set[x].size;
+    }
+}
+
+void DSetUnion(DSetNode *disjoint_set, int x, int y) {
+    DSetLink(disjoint_set, DSetFind(disjoint_set, x),
+             DSetFind(disjoint_set, y));
+}
+
+// ========================================
 // Global variables
 
 int n_mails, n_queries;
@@ -112,6 +147,10 @@ Node *token_table[HASHSIZE] = {0};
 TokenSet tokensets[MAX_NMAILS] = {0};
 
 int current_id = 0;
+
+Node *username_table[HASHSIZE] = {0};
+int edges[MAX_NMAILS][2];
+DSetNode disjoint_set[MAX_USERS] = {0};
 
 /*double similarity_table[MAX_NMAILS][MAX_NMAILS] = {0};*/
 
@@ -314,16 +353,76 @@ void expression_match_query(int query_id, const char *expression) {
     api.answer(query_id, answer, answer_length);
 }
 
+void group_analyse_query(int query_id, const int *mids, int len) {
+    int i, id, user1, user2, n_groups, largest_group, idx, new_size;
+    bool users[MAX_USERS] = {0};
+    bool groups[MAX_USERS] = {0};
+
+    for (i = 0; i < MAX_USERS; ++i)
+        DSetInit(disjoint_set, i);
+    for (i = 0; i < len; ++i) {
+        id = mids[i];
+        user1 = edges[id][0];
+        user2 = edges[id][1];
+        users[user1] = true;
+        users[user2] = true;
+    }
+
+    largest_group = 1;
+    for (i = 0; i < len; ++i) {
+        id = mids[i];
+        user1 = edges[id][0];
+        user2 = edges[id][1];
+        if (DSetFind(disjoint_set, user1) == DSetFind(disjoint_set, user2))
+            continue;
+        DSetUnion(disjoint_set, user1, user2);
+        idx = DSetFind(disjoint_set, user1);
+        new_size = disjoint_set[idx].size;
+        if (new_size > largest_group)
+            largest_group = new_size;
+    }
+
+    n_groups = 0;
+    for (i = 0; i < MAX_USERS; ++i) {
+        idx = DSetFind(disjoint_set, i);
+        if (idx != i && !groups[idx]) {
+            groups[idx] = true;
+            ++n_groups;
+        }
+    }
+
+    answer[0] = n_groups;
+    answer[1] = largest_group;
+    api.answer(query_id, answer, 2);
+}
+
 // ========================================
 
 int main(void) {
     api.init(&n_mails, &n_queries, &mails, &queries);
 
-    int i;
+    int i, id;
 
     for (i = 0; i < n_mails; ++i) {
         parse_and_add_to_token_set(mails[i].subject, tokensets + mails[i].id);
         parse_and_add_to_token_set(mails[i].content, tokensets + mails[i].id);
+    }
+
+    // username preprocessing
+    current_id = 0;
+    for (i = 0; i < n_mails; ++i) {
+        id = DictGet(username_table, mails[i].from);
+        if (id == -1) {
+            id = current_id;
+            DictSet(username_table, mails[i].from, current_id++);
+        }
+        edges[mails[i].id][0] = id;
+        id = DictGet(username_table, mails[i].to);
+        if (id == -1) {
+            id = current_id;
+            DictSet(username_table, mails[i].to, current_id++);
+        }
+        edges[mails[i].id][1] = id;
     }
 
     double score = 0;
@@ -335,10 +434,17 @@ int main(void) {
         /*    score += queries[i].reward;*/
         /*    fprintf(stderr, "%f\n", score);*/
         /*}*/
-        if (queries[i].type == expression_match) {
-            expression_match_query(
-                queries[i].id,
-                queries[i].data.expression_match_data.expression);
+        /*if (queries[i].type == expression_match) {*/
+        /*    expression_match_query(*/
+        /*        queries[i].id,*/
+        /*        queries[i].data.expression_match_data.expression);*/
+        /*    score += queries[i].reward;*/
+        /*    fprintf(stderr, "%f\n", score);*/
+        /*}*/
+        if (queries[i].type == group_analyse) {
+            group_analyse_query(queries[i].id,
+                                queries[i].data.group_analyse_data.mids,
+                                queries[i].data.group_analyse_data.len);
             /*score += queries[i].reward;*/
             /*fprintf(stderr, "%f\n", score);*/
         }
