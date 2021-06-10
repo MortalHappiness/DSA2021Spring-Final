@@ -1,22 +1,20 @@
 #include "api.h"
 
-#define HASHSIZE 19697
-#define INDEXSIZE 1000
+#define HASHSIZE   19697
+#define INDEXSIZE  1000
 #define MAX_NMAILS 10000
 
+#define MAX_TOKENS           140000 // 138078
+#define MAX_TOKENS_PER_EMAIL 4000   // 3416
+
 // ========================================
-// Token set implementation
+// Dictionary implementation (key: string, value: non-negative int)
 
 typedef struct Node {
     struct Node *next;
-    const char *s;
+    const char *key;
+    int value;
 } Node;
-
-typedef struct {
-    Node *hash_table[HASHSIZE];
-    Node *items;
-    int n_items;
-} TokenSet;
 
 // Hash function for string
 // Reference:
@@ -26,39 +24,54 @@ unsigned long hash(const char *str) {
     unsigned long hash = 5381;
     int c;
 
-    while (c = *s++) hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+    while (c = *s++)
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
 
     return hash % HASHSIZE;
 }
 
-// See whether token in the token set or not
-bool SetContains(TokenSet *set, const char *token) {
-    if (!set) return false;
-    unsigned long h = hash(token);
-    Node *node = set->hash_table[h];
+Node *_DictGetNode(Node **table, const char *key, unsigned long h) {
+    Node *node = table[h];
     while (node != NULL) {
-        if (!strcmp(token, node->s)) return true;
+        if (!strcmp(key, node->key))
+            return node;
         node = node->next;
     }
-    return false;
+    return NULL;
 }
 
-// Add a token into the token set
-void SetAdd(TokenSet *set, const char *token) {
-    if (SetContains(set, token)) return;
-    unsigned long h = hash(token);
-    Node *hash_node = (Node *)malloc(sizeof(Node));
-    Node *item_node = (Node *)malloc(sizeof(Node));
-
-    hash_node->s = token;
-    hash_node->next = set->hash_table[h];
-    set->hash_table[h] = hash_node;
-
-    item_node->s = token;
-    item_node->next = set->items;
-    set->items = item_node;
-    ++(set->n_items);
+// Return table[key] if key in table else -1
+int DictGet(Node **table, const char *key) {
+    unsigned long h = hash(key);
+    Node *node = _DictGetNode(table, key, h);
+    if (node != NULL)
+        return node->value;
+    return -1;
 }
+
+// Set table[key] = value
+void DictSet(Node **table, const char *key, int value) {
+    unsigned long h = hash(key);
+    Node *node = _DictGetNode(table, key, h);
+    if (node != NULL) {
+        node->value = value;
+        return;
+    }
+    node = (Node *)malloc(sizeof(Node));
+    node->key = key;
+    node->value = value;
+    node->next = table[h];
+    table[h] = node;
+}
+
+// ========================================
+// Token set implementation
+
+typedef struct {
+    bool set[MAX_TOKENS];
+    int tokens[MAX_TOKENS_PER_EMAIL];
+    int n_tokens;
+} TokenSet;
 
 // ========================================
 // Global variables
@@ -69,16 +82,33 @@ query *queries;
 
 int answer[MAX_NMAILS];
 
-TokenSet tokensets[MAX_NMAILS] = {NULL};
+Node *token_table[HASHSIZE] = {0};
+TokenSet tokensets[MAX_NMAILS] = {0};
+
+int current_id = 0;
+
+/*double similarity_table[MAX_NMAILS][MAX_NMAILS] = {0};*/
 
 // ========================================
+
+void SetAdd(TokenSet *set, const char *s) {
+    int id = DictGet(token_table, s);
+    if (id == -1) {
+        id = current_id;
+        DictSet(token_table, s, current_id++);
+    }
+    if (!(set->set[id])) {
+        set->set[id] = true;
+        set->tokens[(set->n_tokens)++] = id;
+    }
+}
 
 void parse_and_add_to_token_set(char *s, TokenSet *set) {
     char *start = NULL;
     char c;
     while (c = *s) {
         if (c >= 'A' && c <= 'Z')
-            c = *s = c - 'A' + 'a';  // convert to lowercase
+            c = *s = c - 'A' + 'a'; // convert to lowercase
         if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) {
             if (start) {
                 *s = '\0';
@@ -90,26 +120,35 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
         }
         ++s;
     }
-    if (start) SetAdd(set, start);
+    if (start)
+        SetAdd(set, start);
 }
 
 double context_similarity(int i, int j) {
-    Node *node;
-    int temp, n_intersection;
+    int temp, n_intersection, token_id;
 
-    if (tokensets[i].n_items > tokensets[j].n_items) {
+    /*if (similarity_table[i][j] != 0)*/
+    /*    return similarity_table[i][j];*/
+
+    if (tokensets[i].n_tokens > tokensets[j].n_tokens) {
         temp = i;
         i = j;
         j = temp;
     }
-    node = tokensets[i].items;
     n_intersection = 0;
-    while (node) {
-        if (SetContains(tokensets + j, node->s)) ++n_intersection;
-        node = node->next;
+    for (temp = 0; temp < tokensets[i].n_tokens; ++temp) {
+        token_id = tokensets[i].tokens[temp];
+        if (tokensets[j].set[token_id])
+            ++n_intersection;
     }
-    return (double)n_intersection /
-           (tokensets[i].n_items + tokensets[j].n_items - n_intersection);
+    double ans =
+        (double)n_intersection /
+        (tokensets[i].n_tokens + tokensets[j].n_tokens - n_intersection);
+    /*if (ans == 0)*/
+    /*    ans = -1;*/
+    /*similarity_table[i][j] = ans;*/
+    /*similarity_table[j][i] = ans;*/
+    return ans;
 }
 
 void find_similar_query(int query_id, int mail_id, double threshold) {
@@ -117,7 +156,8 @@ void find_similar_query(int query_id, int mail_id, double threshold) {
 
     answer_length = 0;
     for (i = 0; i < n_mails; ++i) {
-        if (i == mail_id) continue;
+        if (i == mail_id)
+            continue;
         if (context_similarity(i, mail_id) > threshold)
             answer[answer_length++] = i;
     }
