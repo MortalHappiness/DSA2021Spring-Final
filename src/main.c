@@ -1,23 +1,23 @@
 #include "api.h"
 
-#define HASHSIZE 200003
+#define HASHSIZE   200003
 #define MAX_NMAILS 10000
 
-#define MAX_TOKENS 138078          // 138078
-#define MAX_TOKENS_PER_EMAIL 3416  // 3416
-#define MAX_USERS 560
+#define MAX_TOKENS           138078 // 138078
+#define MAX_TOKENS_PER_EMAIL 3416   // 3416
+#define MAX_USERS            560
 
 #define MAX_EXPRESSION_LEN 2048
 
 #define OP_NOT (-1)
 #define OP_AND (-2)
-#define OP_OR (-3)
+#define OP_OR  (-3)
 
 // ========================================
 // Bitset implementation
 
 typedef int BitsetItem;
-#define WORD_BITS (sizeof(BitsetItem) << 3)
+#define WORD_BITS   (sizeof(BitsetItem) << 3)
 #define BITSET_SIZE ((MAX_TOKENS / WORD_BITS) + 1)
 
 // Return bitset[idx]
@@ -51,7 +51,8 @@ unsigned long hash(const char *str) {
     unsigned long hash = 5381;
     int c;
 
-    while (c = *s++) hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+    while (c = *s++)
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
 
     return hash % HASHSIZE;
 }
@@ -59,7 +60,8 @@ unsigned long hash(const char *str) {
 Node *_DictGetNode(Node **table, const char *key, unsigned long h) {
     Node *node = table[h];
     while (node != NULL) {
-        if (!strcmp(key, node->key)) return node;
+        if (!strcmp(key, node->key))
+            return node;
         node = node->next;
     }
     return NULL;
@@ -69,7 +71,8 @@ Node *_DictGetNode(Node **table, const char *key, unsigned long h) {
 int DictGet(Node **table, const char *key) {
     unsigned long h = hash(key);
     Node *node = _DictGetNode(table, key, h);
-    if (node != NULL) return node->value;
+    if (node != NULL)
+        return node->value;
     return -1;
 }
 
@@ -170,7 +173,7 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
     char c;
     while (c = *s) {
         if (c >= 'A' && c <= 'Z')
-            c = *s = c - 'A' + 'a';  // convert to lowercase
+            c = *s = c - 'A' + 'a'; // convert to lowercase
         if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) {
             if (start) {
                 *s = '\0';
@@ -182,7 +185,8 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
         }
         ++s;
     }
-    if (start) SetAdd(set, start);
+    if (start)
+        SetAdd(set, start);
 }
 
 double context_similarity(int i, int j) {
@@ -199,7 +203,8 @@ double context_similarity(int i, int j) {
     n_intersection = 0;
     for (temp = 0; temp < tokensets[i].n_tokens; ++temp) {
         token_id = tokensets[i].tokens[temp];
-        if (BitsetGet(tokensets[j].bitset, token_id)) ++n_intersection;
+        if (BitsetGet(tokensets[j].bitset, token_id))
+            ++n_intersection;
     }
     double ans =
         (double)n_intersection /
@@ -216,7 +221,8 @@ void find_similar_query(int query_id, int mail_id, double threshold) {
 
     answer_length = 0;
     for (i = 0; i < n_mails; ++i) {
-        if (i == mail_id) continue;
+        if (i == mail_id)
+            continue;
         if (context_similarity(i, mail_id) > threshold)
             answer[answer_length++] = i;
     }
@@ -292,7 +298,8 @@ void expression_match_query(int query_id, const char *expression) {
     buf_idx = 0;
     for (i = 0; i <= strlen(expression); ++i) {
         c = expression[i];
-        if (c >= 'A' && c <= 'Z') c = c - 'A' + 'a';  // convert to lowercase
+        if (c >= 'A' && c <= 'Z')
+            c = c - 'A' + 'a'; // convert to lowercase
         if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
             buf[buf_idx++] = c;
             continue;
@@ -310,7 +317,8 @@ void expression_match_query(int query_id, const char *expression) {
             case ')':
                 while (stack_size--) {
                     c1 = stack[stack_size];
-                    if (c1 == '(') break;
+                    if (c1 == '(')
+                        break;
                     postfix[postfix_len++] = _translate_to_op(c1);
                 }
                 break;
@@ -319,7 +327,8 @@ void expression_match_query(int query_id, const char *expression) {
             case '|':
                 while (stack_size) {
                     c1 = stack[stack_size - 1];
-                    if (_precedence(c1) < _precedence(c)) break;
+                    if (_precedence(c1) < _precedence(c))
+                        break;
                     --stack_size;
                     postfix[postfix_len++] = _translate_to_op(c1);
                 }
@@ -348,7 +357,8 @@ void group_analyse_query(int query_id, const int *mids, int len) {
     int i, id, user1, user2, n_groups, largest_group, idx, new_size;
     bool groups[MAX_USERS] = {0};
 
-    for (i = 0; i < MAX_USERS; ++i) DSetInit(disjoint_set, i);
+    for (i = 0; i < MAX_USERS; ++i)
+        DSetInit(disjoint_set, i);
     for (i = 0; i < len; ++i) {
         id = mids[i];
         user1 = edges[id][0];
@@ -365,7 +375,8 @@ void group_analyse_query(int query_id, const int *mids, int len) {
         DSetUnion(disjoint_set, user1, user2);
         idx = DSetFind(disjoint_set, user1);
         new_size = disjoint_set[idx].size;
-        if (new_size > largest_group) largest_group = new_size;
+        if (new_size > largest_group)
+            largest_group = new_size;
     }
 
     n_groups = 0;
