@@ -441,6 +441,8 @@ int main(void) {
             /*score += queries[i].reward;*/
             /*fprintf(stderr, "%f\n", score);*/
         }
+    }
+    for (i = 0; i < n_queries; ++i) {
         if (queries[i].type == find_similar && queries[i].reward >= 96) {
             find_similar_query(queries[i].id,
                                queries[i].data.find_similar_data.mid,
