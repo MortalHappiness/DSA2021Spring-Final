@@ -30,7 +30,7 @@ typedef struct {
 typedef struct {
     int n_items;
     unsigned long long bitmap[BITMAP_LEN];
-    // int top;
+    int top;
     int stack[MAX_TOKENS_PER_EMAIL];
 } TokenSet;
 // Hash function for string
@@ -121,7 +121,7 @@ TokenSet tokensets[MAX_NMAILS] = {NULL};
 
 GlobalTokenSet global_tokensets[3];
 
-double similaritys[MAX_NMAILS][MAX_NMAILS] = {0};
+// double similaritys[MAX_NMAILS][MAX_NMAILS] = {0};
 
 // ========================================
 
@@ -193,12 +193,12 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
                 if (num > -1) {
                     idx = num >> 6;
                     if (((set->bitmap[idx] >> (num & 63)) & 1) == 0) {
-                        // set->n_items++;
-                        // if (set->bitmap[idx] == 0) {
-                        //     set->stack[set->top++] = idx;
-                        // }
+                        set->n_items++;
+                        if (set->bitmap[idx] == 0) {
+                            set->stack[set->top++] = idx;
+                        }
                         // printf("before stack\n");
-                        set->stack[set->n_items++] = num;
+                        // set->stack[set->n_items++] = num;
                         set->bitmap[idx] |= (1ULL << (num & 63));
                         // printf("after stack\n");
                     }
@@ -215,11 +215,11 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
         if (num > -1) {
             idx = num >> 6;
             if (((set->bitmap[idx] >> (num % 64)) & 1) == 0) {
-                // set->n_items++;
-                // if (set->bitmap[idx] == 0) {
-                //     set->stack[set->top++] = idx;
-                // }
-                set->stack[set->n_items++] = num;
+                set->n_items++;
+                if (set->bitmap[idx] == 0) {
+                    set->stack[set->top++] = idx;
+                }
+                // set->stack[set->n_items++] = num;
                 set->bitmap[idx] |= (1ULL << (num % 64));
             }
         }
@@ -230,24 +230,25 @@ double context_similarity(int i, int j) {
     Node *node;
     int temp, n_intersection = 0;
     unsigned long long n;
-    if (tokensets[i].n_items > tokensets[j].n_items) {
+    if (tokensets[i].top > tokensets[j].top) {
         temp = i;
         i = j;
         j = temp;
     }
     int idx;
-    for (int tmp = 0; tmp < tokensets[i].n_items; tmp++) {
-        idx = tokensets[i].stack[tmp] >> 6;
+    for (int tmp = 0; tmp < tokensets[i].top; tmp++) {
+        // idx = tokensets[i].stack[tmp] >> 6;
         // printf("%d %d\n", tokensets[i].stack[tmp], idx);
-        if ((tokensets[j].bitmap[idx] >> (tokensets[i].stack[tmp] % 64)) & 1) {
-            n_intersection++;
-        }
-        // n = (tokensets[i].bitmap[tokensets[i].stack[tmp]]) &
-        //     (tokensets[j].bitmap[tokensets[i].stack[tmp]]);
-        // while (n != 0ULL) {
-        //     n = n & (n - 1ULL);
+        // if ((tokensets[j].bitmap[idx] >> (tokensets[i].stack[tmp] % 64)) & 1)
+        // {
         //     n_intersection++;
         // }
+        n = (tokensets[i].bitmap[tokensets[i].stack[tmp]]) &
+            (tokensets[j].bitmap[tokensets[i].stack[tmp]]);
+        while (n != 0ULL) {
+            n = n & (n - 1ULL);
+            n_intersection++;
+        }
     }
     // printf("n_intersection: %d\n", n_intersection);
     return (double)(n_intersection + 8) /
@@ -264,14 +265,14 @@ void find_similar_query(int query_id, int mail_id, double threshold) {
             continue;
         }
 
-        if (similaritys[i][mail_id] != 0) {
-            sim = similaritys[i][mail_id];
-        } else {
-            sim = context_similarity(i, mail_id);
-            similaritys[i][mail_id] = sim;
-            similaritys[mail_id][i] = sim;
-        }
-        if (sim > threshold) {
+        // if (similaritys[i][mail_id] != 0) {
+        //     sim = similaritys[i][mail_id];
+        // } else {
+        //     sim = context_similarity(i, mail_id);
+        //     similaritys[i][mail_id] = sim;
+        //     similaritys[mail_id][i] = sim;
+        // }
+        if (context_similarity(i, mail_id) > threshold) {
             answer[answer_length++] = i;
         }
     }
@@ -311,7 +312,7 @@ int main(void) {
     // double score;
     for (i = 0; i < n_queries; ++i) {
         if (queries[i].type == find_similar &&
-            (queries[i].reward >= 96)) {  //&&
+            (queries[i].reward >= 95)) {  //&&
                                           // (queries[i].reward <= 80)
             find_similar_query(queries[i].id,
                                queries[i].data.find_similar_data.mid,
