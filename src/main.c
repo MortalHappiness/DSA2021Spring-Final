@@ -1,7 +1,7 @@
 #include "api.h"
 
-#define HASHSIZE 94482925
-#define USERHASHSIZE 88647
+#define HASHSIZE 89798433
+#define USERHASHSIZE 5309
 #define MAX_NMAILS 10000
 
 #define MAX_TOKENS 138078         // 138078
@@ -36,10 +36,21 @@ inline void BitsetSet(BitsetItem *bitset, int idx) {
 }
 
 // ========================================
+// Token set implementation
+
+typedef struct TokenSet {
+    BitsetItem bitset[BITSET_SIZE];
+    int tokens[MAX_TOKENS_PER_EMAIL];
+    int n_tokens;
+    int n_top;
+} TokenSet;
+// ========================================
 // Dictionary implementation (key: string, value: non-negative int)
 
 typedef struct Node {
     struct Node *next;
+    // int set[3];
+    struct TokenSet *top;
     // const char *key;
     int len;
     int value;
@@ -59,16 +70,18 @@ int hash(const char *str) {
     return (int)(hash % HASHSIZE);
 }
 
-int userhash(const char *str) {
-    const unsigned char *s = (unsigned char *)str;
-    unsigned long hash = 44;
-    int c;
+// int userhash(const char *str) {
+//     const unsigned char *s = (unsigned char *)str;
+//     unsigned long hash = 44;
+//     int c, len = 0;
 
-    while (c = *s++)
-        hash = ((hash << 7) + hash) + c; /* hash * 33 + c */
-
-    return (int)(hash % USERHASHSIZE);
-}
+//     while (c = *s++) {
+//         hash = ((hash << 7) + hash) + c; /* hash * 33 + c */
+//         len++;
+//     }
+//     // printf("%s %d\n", str, len);
+//     return (int)(hash % USERHASHSIZE);
+// }
 
 Node *_DictGetNode(Node **table, int len, int h) {
     Node *node = table[h];
@@ -83,35 +96,28 @@ Node *_DictGetNode(Node **table, int len, int h) {
 // Return table[key] if key in table else -1
 int DictGet(Node **table, int len, int h) {
     // int h = hash(key);
-    Node *node = _DictGetNode(table, len, h);
-    if (node != NULL)
-        return node->value;
+    Node *node = table[h];
+    while (node != NULL) {
+        if (len == node->len)
+            return node->value;
+        node = node->next;
+    }
     return -1;
+    // Node *node = _DictGetNode(table, len, h);
+    // if (node != NULL)
+    //     return node->value;
+    // return -1;
 }
 
 // Set table[key] = value
 void DictSet(Node **table, int len, int h, int value) {
-    // unsigned long h = hash(key);
-    Node *node = _DictGetNode(table, len, h);
-    if (node != NULL) {
-        // node->value = value;
-        return;
-    }
-    node = (Node *)malloc(sizeof(Node));
+    Node *node = (Node *)malloc(sizeof(Node));
     node->len = len;
     node->value = value;
     node->next = table[h];
+    // node->first = set;
     table[h] = node;
 }
-
-// ========================================
-// Token set implementation
-
-typedef struct {
-    BitsetItem bitset[BITSET_SIZE];
-    int tokens[MAX_TOKENS_PER_EMAIL];
-    int n_tokens;
-} TokenSet;
 
 // ========================================
 // Disjoint set implementation
@@ -168,30 +174,84 @@ int edges[MAX_NMAILS][2];
 DSetNode disjoint_set[MAX_USERS] = {0};
 
 /*double similarity_table[MAX_NMAILS][MAX_NMAILS] = {0};*/
+int pre_intersections[MAX_NMAILS][MAX_NMAILS] = {0};
 
 // ========================================
 
-void SetAdd(TokenSet *set, const char *s, int len) {
+// Return table[key] if key in table else -1
+
+void SetAdd(TokenSet *set, const char *s, int len, int mail_id) {
     int h = hash(s);
     // int len = strlen(s);
     // printf("%s %d\n", s, len);
-    int id = DictGet(token_table, len, h);
-    // printf("after dictget\n");
-    if (id == -1) {
+    // int id = DictGet(token_table, len, h);
+    int id;
+    Node *node = _DictGetNode(token_table, len, h);
+    if (node != NULL) {
+        // node->value = value;
+        // return;
+        id = node->value;
+    } else {
         id = current_id;
-        DictSet(token_table, len, h, current_id++);
-    } else if (id == -2) {
+        node = (Node *)malloc(sizeof(Node));
+        node->len = len;
+        node->value = id;
+        node->next = token_table[h];
+        node->top = set;
+        token_table[h] = node;
+        BitsetSet(set->bitset, id);
+        (set->n_tokens)++;
+        current_id++;
         return;
     }
+
+    if (id == -2) {
+        return;
+    }
+
     if (!(BitsetGet(set->bitset, id))) {
         BitsetSet(set->bitset, id);
-        set->tokens[(set->n_tokens)++] = id;
+        if (node->top != -1) {
+            // for (int j = 0; j < node->top; j++) {
+            //     pre_intersections[node->set[j]][mail_id] += 1;
+            // }
+            // node->set[node->top++] = mail_id;
+            // (node->set[2])->tokens[((node->set[2])->n_top)++] = id;
+            // node->set[2] = -1;
+            // BitsetSet(set->bitset, id);
+            (node->top)->tokens[((node->top)->n_top)++] = id;
+            node->top = -1;
+        }
+        // else if (node->top == 3) {
+        //     pre_intersections[node->set[0]][node->set[1]] -= 1;
+        //     pre_intersections[node->set[0]][node->set[2]] -= 1;
+        //     pre_intersections[node->set[1]][node->set[2]] -= 1;
+        //     for (int j = 0; j < 3; j++) {
+        //         (tokensets + node->set[j])
+        //             ->tokens[((tokensets + node->set[j])->n_top)++] = id;
+        //     }
+        //     node->top++;
+        //     set->tokens[(set->n_top)++] = id;
+        // } else {
+        set->tokens[(set->n_top)++] = id;
+        // }
+        set->n_tokens++;
     }
 }
 
 int UserSetAdd(TokenSet *set, const char *s) {
-    int h = userhash(s);
-    int len = strlen(s);
+    // const unsigned char *str = (unsigned char *)s;
+    unsigned long hash = 44;
+    int c, len = 0;
+
+    while (c = *s++) {
+        hash = ((hash << 7) + hash) + c; /* hash * 33 + c */
+        len++;
+    }
+    // printf("%s %d\n", str, len);
+    // return (int)(hash % USERHASHSIZE);
+    int h = (int)(hash % USERHASHSIZE);
+    // int len = strlen(s);
     int id = DictGet(username_table, len, h);
     if (id == -1) {
         id = current_id;
@@ -200,7 +260,7 @@ int UserSetAdd(TokenSet *set, const char *s) {
     return id;
 }
 
-void parse_and_add_to_token_set(char *s, TokenSet *set) {
+void parse_and_add_to_token_set(char *s, TokenSet *set, int mail_id) {
     char *start = NULL;
     char c;
     while (c = *s) {
@@ -210,7 +270,7 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
             if (start) {
                 *s = '\0';
                 // printf("before setadd\n");
-                SetAdd(set, start, s - start);
+                SetAdd(set, start, s - start, mail_id);
                 // printf("after setadd\n");
                 start = NULL;
             }
@@ -220,25 +280,32 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
         ++s;
     }
     if (start)
-        SetAdd(set, start, s - start);
+        SetAdd(set, start, s - start, mail_id);
 }
 
-double context_similarity(int i, int j) {
+double context_similarity(int i, int j, double threshold) {
     int temp, n_intersection, token_id;
-
+    // int bound = (double)((threshold * (double)(tokensets[i].n_tokens +
+    //                                            tokensets[j].n_tokens +
+    //                                            8)) -
+    //                      (double)8) /
+    //             (double)(1 + threshold);
     /*if (similarity_table[i][j] != 0)*/
     /*    return similarity_table[i][j];*/
 
-    if (tokensets[i].n_tokens > tokensets[j].n_tokens) {
+    n_intersection = 0;
+    if (tokensets[i].n_top > tokensets[j].n_top) {
         temp = i;
         i = j;
         j = temp;
     }
-    n_intersection = 0;
-    for (temp = 0; temp < tokensets[i].n_tokens; ++temp) {
+    for (temp = 0; temp < tokensets[i].n_top; ++temp) {
         token_id = tokensets[i].tokens[temp];
         if (BitsetGet(tokensets[j].bitset, token_id))
             ++n_intersection;
+        // if (n_intersection > bound) {
+        //     return true;
+        // }
     }
     double ans =
         (double)(n_intersection + 8) /
@@ -254,10 +321,15 @@ void find_similar_query(int query_id, int mail_id, double threshold) {
     int i, answer_length;
 
     answer_length = 0;
-    for (i = 0; i < n_mails; ++i) {
-        if (i == mail_id)
-            continue;
-        if (context_similarity(i, mail_id) > threshold)
+    for (i = 0; i < mail_id; ++i) {
+
+        if (context_similarity(i, mail_id, threshold) >
+            threshold) // > threshold
+            answer[answer_length++] = i;
+    }
+    for (i = mail_id + 1; i < n_mails; ++i) {
+        if (context_similarity(mail_id, i, threshold) >
+            threshold) // > threshold
             answer[answer_length++] = i;
     }
     api.answer(query_id, answer, answer_length);
@@ -431,6 +503,7 @@ int main(void) {
     // username_table = malloc(USERHASHSIZE * sizeof(Node *));
     token_table = malloc(HASHSIZE * sizeof(Node *));
     api.init(&n_mails, &n_queries, &mails, &queries);
+    // clock_t start = clock();
     int h;
     h = hash("i");
     DictSet(token_table, 1, h, -2);
@@ -448,21 +521,25 @@ int main(void) {
     DictSet(token_table, 9, h, -2);
     h = hash("org");
     DictSet(token_table, 3, h, -2);
-
+    // printf("%ld\n", clock() - start);
     int i, id;
     for (i = 0; i < n_mails; ++i) {
-        parse_and_add_to_token_set(mails[i].subject, tokensets + mails[i].id);
-        parse_and_add_to_token_set(mails[i].content, tokensets + mails[i].id);
+        parse_and_add_to_token_set(mails[i].subject, tokensets + mails[i].id,
+                                   mails[i].id);
+        parse_and_add_to_token_set(mails[i].content, tokensets + mails[i].id,
+                                   mails[i].id);
         // break;
     }
     // username preprocessing
+    // printf("%ld\n", clock() - start);
     current_id = 0;
     for (i = 0; i < n_mails; ++i) {
         // h = hash(mails[i].from);
         // id = DictGet(username_table, strlen(mails[i].from), h);
         // if (id == -1) {
         //     id = current_id;
-        //     DictSet(username_table, strlen(mails[i].from), h, current_id++);
+        //     DictSet(username_table, strlen(mails[i].from), h,
+        //     current_id++);
         // }
         id = UserSetAdd(username_table, mails[i].from);
         edges[mails[i].id][0] = id;
@@ -470,11 +547,13 @@ int main(void) {
         // id = DictGet(username_table, strlen(mails[i].to), h);
         // if (id == -1) {
         //     id = current_id;
-        //     DictSet(username_table, strlen(mails[i].to), h, current_id++);
+        //     DictSet(username_table, strlen(mails[i].to), h,
+        //     current_id++);
         // }
         id = UserSetAdd(username_table, mails[i].to);
         edges[mails[i].id][1] = id;
     }
+    // printf("%ld\n", clock() - start);
 
     // double score = 0;
     for (i = 0; i < n_queries; ++i) {
@@ -485,17 +564,49 @@ int main(void) {
         /*    score += queries[i].reward;*/
         /*    fprintf(stderr, "%f\n", score);*/
         /*}*/
-        if (queries[i].type == group_analyse) {
+        // if (queries[i].type == group_analyse &&
+        //     queries[i].reward * 125 >=
+        //     queries[i].data.group_analyse_data.len) {
+        //     group_analyse_query(queries[i].id,
+        //                         queries[i].data.group_analyse_data.mids,
+        //                         queries[i].data.group_analyse_data.len);
+        // score += queries[i].reward;
+        // fprintf(stderr, "%f\n", score);
+        // } else
+        if (queries[i].type == find_similar) {
+            if (queries[i].reward > 100) {
+                if (queries[i].reward * 1.4 >
+                    tokensets[queries[i].data.find_similar_data.mid]
+                        .n_top) { // tokensets[queries[i].data.find_similar_data.mid].n_top
+                                  // <= 120
+                    find_similar_query(
+                        queries[i].id, queries[i].data.find_similar_data.mid,
+                        queries[i].data.find_similar_data.threshold);
+                } else {
+                }
+            } else {
+                if (tokensets[queries[i].data.find_similar_data.mid].n_top * 2 <
+                    queries[i].reward) {
+                    find_similar_query(
+                        queries[i].id, queries[i].data.find_similar_data.mid,
+                        queries[i].data.find_similar_data.threshold);
+                }
+            }
+
+            // fprintf(stderr, "%d %f\n",
+            //         tokensets[queries[i].data.find_similar_data.mid].n_top,
+            //         queries[i].reward);
+            // score += queries[i].reward;
+            // fprintf(stderr, "%f\n", score);
+        }
+    }
+    for (i = 0; i < n_queries; ++i) {
+
+        if (queries[i].type == group_analyse &&
+            queries[i].reward * 200 >= queries[i].data.group_analyse_data.len) {
             group_analyse_query(queries[i].id,
                                 queries[i].data.group_analyse_data.mids,
                                 queries[i].data.group_analyse_data.len);
-            // score += queries[i].reward;
-            // fprintf(stderr, "%f\n", score);
-        } else if (queries[i].type == find_similar &&
-                   queries[i].reward >= 100) {
-            find_similar_query(queries[i].id,
-                               queries[i].data.find_similar_data.mid,
-                               queries[i].data.find_similar_data.threshold);
             // score += queries[i].reward;
             // fprintf(stderr, "%f\n", score);
         }
