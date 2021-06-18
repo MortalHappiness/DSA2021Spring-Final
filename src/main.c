@@ -182,14 +182,9 @@ bool similarity_available[MAX_NMAILS] = {false};
 
 void SetAdd(TokenSet *set, const char *s, int len, int mail_id) {
     int h = hash(s);
-    // int len = strlen(s);
-    // printf("%s %d\n", s, len);
-    // int id = DictGet(token_table, len, h);
     int id;
     Node *node = _DictGetNode(token_table, len, h);
     if (node != NULL) {
-        // node->value = value;
-        // return;
         id = node->value;
     } else {
         id = current_id;
@@ -260,8 +255,7 @@ int UserSetAdd(TokenSet *set, const char *s) {
     return id;
 }
 
-void parse_and_add_to_token_set(char *s, TokenSet *set, int mail_id,
-                                bool flag) {
+void parse_and_add_to_token_set(char *s, TokenSet *set, int mail_id) {
     char *start = NULL;
     char c;
     while (c = *s) {
@@ -282,10 +276,6 @@ void parse_and_add_to_token_set(char *s, TokenSet *set, int mail_id,
     }
     if (start)
         SetAdd(set, start, s - start, mail_id);
-    if (set->n_top < 24 && flag) {
-        similarity_available[mail_id] = true;
-        // printf("%d mail id parse\n", mail_id);
-    }
 }
 
 double context_similarity(int i, int j) {
@@ -327,7 +317,7 @@ void build_similarity_table(int mail_id) {
     for (i = 0; i < mail_id; ++i) {
         similarity_table[mail_id][i] = context_similarity(mail_id, i);
     }
-    for (i = mail_id + 1; i < n_mails; ++i) {
+    for (i = i + 1; i < n_mails; ++i) {
         similarity_table[mail_id][i] = context_similarity(mail_id, i);
     }
 }
@@ -344,7 +334,7 @@ void find_similar_query(int query_id, int mail_id, double threshold) {
         //     threshold)  // > threshold
         //     answer[answer_length++] = i;
     }
-    for (i = mail_id + 1; i < n_mails; ++i) {
+    for (i = i + 1; i < n_mails; ++i) {
         // if (context_similarity(mail_id, i, threshold) >
         //     threshold)  // > threshold
         //     answer[answer_length++] = i;
@@ -545,19 +535,27 @@ int main(void) {
     int i, id;
     for (i = 0; i < n_mails; ++i) {
         parse_and_add_to_token_set(mails[i].subject, tokensets + mails[i].id,
-                                   mails[i].id, false);
+                                   mails[i].id);
         parse_and_add_to_token_set(mails[i].content, tokensets + mails[i].id,
-                                   mails[i].id, true);
-        // break;
+                                   mails[i].id);
     }
+    int cnt = 0;
+    int top;
     for (i = 0; i < n_mails; ++i) {
-        if (similarity_available[i]) {
+        // best with no reward bound 24
+        top = (tokensets + i)->n_top;
+        if ((top < 25)) {
+            cnt++;
+            similarity_available[i] = true;
             build_similarity_table(i);
-            // printf("build %d\n", i);
+            if (cnt >= 2000) {
+                break;
+            }
         }
+        // printf("%d\n", (tokensets + i)->n_top);
     }
     // username preprocessing
-    // printf("%ld\n", clock() - start);
+
     // current_id = 0;
     // for (i = 0; i < n_mails; ++i) {
     //     // h = hash(mails[i].from);
@@ -579,7 +577,6 @@ int main(void) {
     //     id = UserSetAdd(username_table, mails[i].to);
     //     edges[mails[i].id][1] = id;
     // }
-    // printf("%ld\n", clock() - start);
 
     // double score = 0;
     for (i = 0; i < n_queries; ++i) {
@@ -596,66 +593,6 @@ int main(void) {
         //     group_analyse_query(queries[i].id,
         //                         queries[i].data.group_analyse_data.mids,
         //                         queries[i].data.group_analyse_data.len);
-        // score += queries[i].reward;
-        // fprintf(stderr, "%f\n", score);
-        // } else
-        // if (queries[i].type == find_similar) {
-        //     if (queries[i].reward > 100) {
-        //         if (queries[i].reward > 140) {
-        //             if (queries[i].reward >
-        //                 tokensets[queries[i].data.find_similar_data.mid]
-        //                     .n_top) {  //
-        //                     tokensets[queries[i].data.find_similar_data.mid].n_top
-        //                                // <= 120
-        //                 find_similar_query(
-        //                     queries[i].id,
-        //                     queries[i].data.find_similar_data.mid,
-        //                     queries[i].data.find_similar_data.threshold);
-        //             }
-        //         } else if (queries[i].reward > 120) {
-        //             if (queries[i].reward * 0.8 >
-        //                 tokensets[queries[i].data.find_similar_data.mid]
-        //                     .n_top) {  //
-        //                     tokensets[queries[i].data.find_similar_data.mid].n_top
-        //                                // <= 120
-        //                 find_similar_query(
-        //                     queries[i].id,
-        //                     queries[i].data.find_similar_data.mid,
-        //                     queries[i].data.find_similar_data.threshold);
-        //             }
-        //         } else {
-        //             if (queries[i].reward * 0.85 >
-        //                 tokensets[queries[i].data.find_similar_data.mid]
-        //                     .n_top) {  //
-        //                     tokensets[queries[i].data.find_similar_data.mid].n_top
-        //                                // <= 120
-        //                 find_similar_query(
-        //                     queries[i].id,
-        //                     queries[i].data.find_similar_data.mid,
-        //                     queries[i].data.find_similar_data.threshold);
-        //             }
-        //         }
-        //     } else if (queries[i].reward > 90) {
-        //         if (tokensets[queries[i].data.find_similar_data.mid].n_top *
-        //                 1.5 <
-        //             queries[i].reward) {
-        //             find_similar_query(
-        //                 queries[i].id, queries[i].data.find_similar_data.mid,
-        //                 queries[i].data.find_similar_data.threshold);
-        //         }
-        //     } else {
-        //         if (tokensets[queries[i].data.find_similar_data.mid].n_top *
-        //         2 <
-        //             queries[i].reward) {
-        //             find_similar_query(
-        //                 queries[i].id, queries[i].data.find_similar_data.mid,
-        //                 queries[i].data.find_similar_data.threshold);
-        //         }
-        //     }
-
-        // fprintf(stderr, "%d %f\n",
-        //         tokensets[queries[i].data.find_similar_data.mid].n_top,
-        //         queries[i].reward);
         // score += queries[i].reward;
         // fprintf(stderr, "%f\n", score);
         // }
