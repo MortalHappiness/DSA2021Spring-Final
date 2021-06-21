@@ -240,6 +240,14 @@ void output_intersection_table() {
     printf("%s", "\";");
 }
 
+void output_tokenset_size() {
+    printf("%s", "const int TOKENSET_SIZE[] = {");
+    for (int i = 0; i < MAX_NMAILS; ++i) {
+        printf("%d,", tokensets[i].n_tokens);
+    }
+    printf("%s", "};");
+}
+
 // ========================================
 
 int main(void) {
@@ -274,6 +282,8 @@ int main(void) {
             intersection(i, j);
     fprintf(stderr, "%s\n", "Output intersection table...");
     output_intersection_table();
+    fprintf(stderr, "%s\n", "Output tokenset size...");
+    output_tokenset_size();
 
     return 0;
 }
