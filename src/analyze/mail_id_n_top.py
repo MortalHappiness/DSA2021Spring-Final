@@ -14,7 +14,8 @@ with open("../n_item_without_1_8.txt", "r") as fin:
     cost = 0
     for ele in tops:
         c.update([ele])
-        if (ele < 11)  or (71 <= ele and ele <= 79): #62~70 70~78 72~80
+        # 1951 231311072
+        if (ele < 24)  : #62~70 70~78 72~80 or (20 <= ele and ele <= 24)
             cnt += 1
             cost += time[ele]
     # print(c.most_common()[:])
