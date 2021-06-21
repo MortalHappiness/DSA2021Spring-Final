@@ -4,8 +4,8 @@ main: main_generated.c api.h
 validator/validator: validator/validator.cpp
 	g++ validator/validator.cpp -o validator/validator -O3
 
-main_generated.c: main.c variables.c combine.sh
-	bash combine.sh
+main_generated.c: main.c variables.c combine.py
+	python3 combine.py
 
 .PHONY=run
 run: main validator/validator
