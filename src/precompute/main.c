@@ -148,7 +148,7 @@ Node *username_table[HASHSIZE] = {0};
 int edges[MAX_NMAILS][2];
 DSetNode disjoint_set[MAX_USERS] = {0};
 
-double SIMILARITY_TABLE[MAX_NMAILS][MAX_NMAILS] = {0};
+int INTERSECTION_TABLE[MAX_NMAILS][MAX_NMAILS] = {0};
 
 // ========================================
 
@@ -185,38 +185,59 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
         SetAdd(set, start);
 }
 
-double context_similarity(int i, int j) {
-    int temp, n_intersection, token_id;
+void intersection(const int i, const int j) {
+    int temp, n_intersection, token_id, x, y;
 
-    if (tokensets[i].n_tokens > tokensets[j].n_tokens) {
-        temp = i;
-        i = j;
-        j = temp;
+    if (tokensets[i].n_tokens <= tokensets[j].n_tokens) {
+        x = i;
+        y = j;
+    } else {
+        x = j;
+        y = i;
     }
     n_intersection = 0;
-    for (temp = 0; temp < tokensets[i].n_tokens; ++temp) {
-        token_id = tokensets[i].tokens[temp];
-        if (BitsetGet(tokensets[j].bitset, token_id))
+    for (temp = 0; temp < tokensets[x].n_tokens; ++temp) {
+        token_id = tokensets[x].tokens[temp];
+        if (BitsetGet(tokensets[y].bitset, token_id))
             ++n_intersection;
     }
-    double ans =
-        (double)n_intersection /
-        (tokensets[i].n_tokens + tokensets[j].n_tokens - n_intersection);
-    return ans;
+    INTERSECTION_TABLE[i][j] = n_intersection;
 }
 
 // ========================================
 
-void output_similarity_table() {
-    printf("const double SIMILARITY_TABLE[MAX_NMAILS][MAX_NMAILS] = {");
-    for (int i = 0; i < MAX_NMAILS; ++i) {
-        printf("{");
-        for (int j = 0; j < MAX_NMAILS; ++j) {
-            printf("%f,", SIMILARITY_TABLE[i][j]);
+void output_intersection_table() {
+    // represent number as base 57 to reduce length
+
+    // space is 32
+    char lower = '#';             // 35
+    char upper = '[';             // 91
+    int base = upper - lower + 1; // 57
+    char buf[8];
+    int n, x, i, j;
+
+    printf("%s", "const char INTERSECTION_TABLE_STR[] = \"");
+    for (i = 0; i < MAX_NMAILS; ++i) {
+        for (j = i + 1; j < MAX_NMAILS; ++j) {
+            n = 0;
+            x = INTERSECTION_TABLE[i][j];
+            if (x == 0) {
+                printf("%c", lower);
+            } else {
+                while (x != 0) {
+                    buf[n++] = x % base;
+                    x /= base;
+                }
+                --n;
+                while (n >= 0) {
+                    printf("%c", buf[n] + lower);
+                    --n;
+                }
+            }
+            printf(" ");
         }
-        printf("},");
     }
-    printf("};");
+    printf("%s", "\";");
 }
 
 // ========================================
@@ -224,7 +245,7 @@ void output_similarity_table() {
 int main(void) {
     api.init(&n_mails, &n_queries, &mails, &queries);
 
-    int i, id;
+    int i, j, id;
 
     for (i = 0; i < n_mails; ++i) {
         parse_and_add_to_token_set(mails[i].subject, tokensets + mails[i].id);
@@ -248,11 +269,11 @@ int main(void) {
         edges[mails[i].id][1] = id;
     }
 
-    /*for (int x = 0; x < 10; ++x)*/
-    /*    for (int y = 0; y < 10; ++y)*/
-    /*        printf("x = %d, y = %d, sim = %f\n", x, y,*/
-    /*               context_similarity(x, y));*/
-    output_similarity_table();
+    for (int i = 0; i < MAX_NMAILS; ++i)
+        for (int j = 0; j < MAX_NMAILS; ++j)
+            intersection(i, j);
+    fprintf(stderr, "%s\n", "Output intersection table...");
+    output_intersection_table();
 
     return 0;
 }

@@ -16,6 +16,8 @@
 // ========================================
 // PRECOMPUTED VALUES
 
+// const char INTERSECTION_TABLE_STR[];
+
 // ========================================
 // Bitset implementation
 
@@ -155,7 +157,7 @@ Node *username_table[HASHSIZE] = {0};
 int edges[MAX_NMAILS][2];
 DSetNode disjoint_set[MAX_USERS] = {0};
 
-/*double similarity_table[MAX_NMAILS][MAX_NMAILS] = {0};*/
+int INTERSECTION_TABLE[MAX_NMAILS][MAX_NMAILS] = {0};
 
 // ========================================
 
@@ -193,29 +195,10 @@ void parse_and_add_to_token_set(char *s, TokenSet *set) {
 }
 
 double context_similarity(int i, int j) {
-    int temp, n_intersection, token_id;
-
-    /*if (similarity_table[i][j] != 0)*/
-    /*    return similarity_table[i][j];*/
-
-    if (tokensets[i].n_tokens > tokensets[j].n_tokens) {
-        temp = i;
-        i = j;
-        j = temp;
-    }
-    n_intersection = 0;
-    for (temp = 0; temp < tokensets[i].n_tokens; ++temp) {
-        token_id = tokensets[i].tokens[temp];
-        if (BitsetGet(tokensets[j].bitset, token_id))
-            ++n_intersection;
-    }
+    int n_intersection = INTERSECTION_TABLE[i][j];
     double ans =
         (double)n_intersection /
         (tokensets[i].n_tokens + tokensets[j].n_tokens - n_intersection);
-    /*if (ans == 0)*/
-    /*    ans = -1;*/
-    /*similarity_table[i][j] = ans;*/
-    /*similarity_table[j][i] = ans;*/
     return ans;
 }
 
@@ -394,10 +377,42 @@ void group_analyse_query(int query_id, const int *mids, int len) {
 
 // ========================================
 
+void parse_intersection_table() {
+    // space is 32
+    char lower = '#';             // 35
+    char upper = '[';             // 91
+    int base = upper - lower + 1; // 57
+
+    int i, j, k, cur, n;
+    char c;
+    cur = 0;
+    n = strlen(INTERSECTION_TABLE_STR);
+    i = 0;
+    j = 1;
+    for (k = 0; k < n; ++k) {
+        c = INTERSECTION_TABLE_STR[k];
+        if (c == ' ') {
+            INTERSECTION_TABLE[i][j] = INTERSECTION_TABLE[j][i] = cur;
+            ++j;
+            if (j == MAX_NMAILS) {
+                ++i;
+                j = i + 1;
+            }
+            cur = 0;
+        } else {
+            cur = base * cur + (c - lower);
+        }
+    }
+}
+
+// ========================================
+
 int main(void) {
     api.init(&n_mails, &n_queries, &mails, &queries);
 
     int i, id;
+
+    parse_intersection_table();
 
     for (i = 0; i < n_mails; ++i) {
         parse_and_add_to_token_set(mails[i].subject, tokensets + mails[i].id);
@@ -423,21 +438,7 @@ int main(void) {
 
     double score = 0;
     for (i = 0; i < n_queries; ++i) {
-        /*if (queries[i].type == expression_match) {*/
-        /*    expression_match_query(*/
-        /*        queries[i].id,*/
-        /*        queries[i].data.expression_match_data.expression);*/
-        /*    score += queries[i].reward;*/
-        /*    fprintf(stderr, "%f\n", score);*/
-        /*}*/
-        if (queries[i].type == group_analyse) {
-            group_analyse_query(queries[i].id,
-                                queries[i].data.group_analyse_data.mids,
-                                queries[i].data.group_analyse_data.len);
-            /*score += queries[i].reward;*/
-            /*fprintf(stderr, "%f\n", score);*/
-        } else if (queries[i].type == find_similar &&
-                   queries[i].reward >= 100) {
+        if (queries[i].type == find_similar) {
             find_similar_query(queries[i].id,
                                queries[i].data.find_similar_data.mid,
                                queries[i].data.find_similar_data.threshold);
