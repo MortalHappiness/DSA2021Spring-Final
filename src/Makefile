@@ -1,8 +1,11 @@
-main: main.c api.h
-	gcc main.c -o main -O3 -std=c11 -w -Wall
+main: main_generated.c api.h
+	gcc main_generated.c -o main -O3 -std=c11 -w -Wall
 
 validator/validator: validator/validator.cpp
 	g++ validator/validator.cpp -o validator/validator -O3
+
+main_generated.c: main.c variables.c combine.sh
+	bash combine.sh
 
 .PHONY=run
 run: main validator/validator

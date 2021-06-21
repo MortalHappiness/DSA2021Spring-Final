@@ -1,6 +1,8 @@
 src/main
 src/validator/validator
 src/testdata
+src/variables.c
+src/main_generated.c
 
 *.swp
 

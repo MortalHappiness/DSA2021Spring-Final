@@ -1,24 +1,27 @@
 #include "api.h"
 
-#define HASHSIZE 88349933
+#define HASHSIZE     88349933
 #define USERHASHSIZE 5309
-#define MAX_NMAILS 10000
+#define MAX_NMAILS   10000
 
-#define MAX_TOKENS 138078         // 138078
-#define MAX_TOKENS_PER_EMAIL 3416 // 3416
-#define MAX_USERS 560
+#define MAX_TOKENS           138078 // 138078
+#define MAX_TOKENS_PER_EMAIL 3416   // 3416
+#define MAX_USERS            560
 
 #define MAX_EXPRESSION_LEN 2048
 
 #define OP_NOT (-1)
 #define OP_AND (-2)
-#define OP_OR (-3)
+#define OP_OR  (-3)
+
+// ========================================
+// PRECOMPUTED VALUES
 
 // ========================================
 // Bitset implementation
 
 typedef int BitsetItem;
-#define WORD_BITS (sizeof(BitsetItem) << 3)
+#define WORD_BITS   (sizeof(BitsetItem) << 3)
 #define BITSET_SIZE ((MAX_TOKENS / WORD_BITS) + 1)
 
 // Return bitset[idx]
@@ -347,27 +350,27 @@ void find_similar_query(int query_id, int mail_id, double threshold) {
 
 inline int _precedence(char c) {
     switch (c) {
-    case '!':
-        return 3;
-    case '&':
-        return 2;
-    case '|':
-        return 1;
-    default:
-        return 0;
+        case '!':
+            return 3;
+        case '&':
+            return 2;
+        case '|':
+            return 1;
+        default:
+            return 0;
     }
 }
 
 inline int _translate_to_op(char c) {
     switch (c) {
-    case '!':
-        return OP_NOT;
-    case '&':
-        return OP_AND;
-    case '|':
-        return OP_OR;
-    default:
-        return -100;
+        case '!':
+            return OP_NOT;
+        case '&':
+            return OP_AND;
+        case '|':
+            return OP_OR;
+        default:
+            return -100;
     }
 }
 
@@ -381,19 +384,19 @@ bool expression_match_single(const int *postfix, int postfix_len, int id) {
             stack[stack_size++] = BitsetGet(tokensets[id].bitset, token);
         } else {
             switch (token) {
-            case OP_NOT:
-                stack[stack_size - 1] = !stack[stack_size - 1];
-                break;
-            case OP_AND:
-                stack[stack_size - 2] &= stack[stack_size - 1];
-                --stack_size;
-                break;
-            case OP_OR:
-                stack[stack_size - 2] |= stack[stack_size - 1];
-                --stack_size;
-                break;
-            default:
-                break;
+                case OP_NOT:
+                    stack[stack_size - 1] = !stack[stack_size - 1];
+                    break;
+                case OP_AND:
+                    stack[stack_size - 2] &= stack[stack_size - 1];
+                    --stack_size;
+                    break;
+                case OP_OR:
+                    stack[stack_size - 2] |= stack[stack_size - 1];
+                    --stack_size;
+                    break;
+                default:
+                    break;
             }
         }
     }
@@ -429,37 +432,37 @@ void expression_match_query(int query_id, const char *expression) {
             buf_idx = 0;
         }
         switch (c) {
-        case '(':
-            stack[stack_size++] = '(';
-            break;
-        case ')':
-            while (stack_size--) {
-                c1 = stack[stack_size];
-                if (c1 == '(')
-                    break;
-                postfix[postfix_len++] = _translate_to_op(c1);
-            }
-            break;
-        case '!':
-        case '&':
-        case '|':
-            while (stack_size) {
-                c1 = stack[stack_size - 1];
-                if (_precedence(c1) < _precedence(c))
-                    break;
-                --stack_size;
-                postfix[postfix_len++] = _translate_to_op(c1);
-            }
-            stack[stack_size++] = c;
-            break;
-        case '\0':
-            while (stack_size--) {
-                c1 = stack[stack_size];
-                postfix[postfix_len++] = _translate_to_op(c1);
-            }
-            break;
-        default:
-            break;
+            case '(':
+                stack[stack_size++] = '(';
+                break;
+            case ')':
+                while (stack_size--) {
+                    c1 = stack[stack_size];
+                    if (c1 == '(')
+                        break;
+                    postfix[postfix_len++] = _translate_to_op(c1);
+                }
+                break;
+            case '!':
+            case '&':
+            case '|':
+                while (stack_size) {
+                    c1 = stack[stack_size - 1];
+                    if (_precedence(c1) < _precedence(c))
+                        break;
+                    --stack_size;
+                    postfix[postfix_len++] = _translate_to_op(c1);
+                }
+                stack[stack_size++] = c;
+                break;
+            case '\0':
+                while (stack_size--) {
+                    c1 = stack[stack_size];
+                    postfix[postfix_len++] = _translate_to_op(c1);
+                }
+                break;
+            default:
+                break;
         }
     }
 
