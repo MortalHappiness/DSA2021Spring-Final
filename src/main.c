@@ -25,10 +25,13 @@ void find_similar_query(int query_id, int mail_id, double threshold) {
     int i, answer_length;
 
     answer_length = 0;
-    for (i = 0; i < n_mails; ++i) {
-        if (i == mail_id)
-            continue;
-        if (SIMILARITY_TABLE[i][mail_id] > threshold)
+    double *row = SIMILARITY_TABLE[mail_id];
+    for (i = 0; i < mail_id; ++i) {
+        if (row[i] > threshold)
+            answer[answer_length++] = i;
+    }
+    for (i = i + 1; i < n_mails; ++i) {
+        if (row[i] > threshold)
             answer[answer_length++] = i;
     }
     api.answer(query_id, answer, answer_length);
@@ -74,14 +77,14 @@ int main(void) {
 
     parse_intersection_table();
 
-    double score = 0;
+    // double score = 0;
     for (i = 0; i < n_queries; ++i) {
-        if (queries[i].type == find_similar && queries[i].reward > 70) {
+        if (queries[i].type == find_similar && queries[i].reward > 80) {
             find_similar_query(queries[i].id,
                                queries[i].data.find_similar_data.mid,
                                queries[i].data.find_similar_data.threshold);
-            /*score += queries[i].reward;*/
-            /*fprintf(stderr, "%f\n", score);*/
+            // score += queries[i].reward;
+            // fprintf(stderr, "%f\n", score);
         }
     }
 
