@@ -74,7 +74,6 @@ int main(void) {
     api.init(&n_mails, &n_queries, &mails, &queries);
 
     int i, id;
-
     parse_intersection_table();
 
     // double score = 0;
