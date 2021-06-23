@@ -78,7 +78,7 @@ int main(void) {
 
     // double score = 0;
     for (i = 0; i < n_queries; ++i) {
-        if (queries[i].type == find_similar && queries[i].reward < 70) {
+        if (queries[i].type == find_similar && queries[i].reward >= 57) {
             find_similar_query(queries[i].id,
                                queries[i].data.find_similar_data.mid,
                                queries[i].data.find_similar_data.threshold);
