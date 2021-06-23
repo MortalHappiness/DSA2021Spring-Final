@@ -48,7 +48,8 @@ void parse_intersection_table() {
     int i, j, k, cur, n;
     char c;
     cur = 0;
-    n = strlen(INTERSECTION_TABLE_STR);
+    n = 102247773; // strlen(INTERSECTION_TABLE_STR);
+    // printf("n: %ld\n", n);
     i = 0;
     j = 1;
     for (k = 0; k < n; ++k) {
@@ -73,7 +74,8 @@ void parse_intersection_table() {
 int main(void) {
     api.init(&n_mails, &n_queries, &mails, &queries);
 
-    int i, id;
+    int i;
+    // , id;
     parse_intersection_table();
 
     // double score = 0;
